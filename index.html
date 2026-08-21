@@ -3,128 +3,109 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Учёт точек и фотоцентр</title>
+<title>Управление Фотоцентром</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0F0F10; --bg-2:#18181B; --surface:#1B1B1E; --surface-2:#232326;
-    --ink:#F1EDE4; --ink-soft:#9C978C; --line:#2A2A2D; --line-strong:#38383C;
-    --red:#C6685A; --red-dark:#E08B7C; --blue:#7C9BC2; --brass:#C7A15C;
-    --brass-light:#DFBD82; --green:#7FAE8E; --green-light:#9BC7AA;
-    --danger-tint: rgba(198,104,90,0.14); --warn-tint: rgba(199,161,92,0.14);
-    --success-tint: rgba(127,174,142,0.18); --on-btn:#100F0D;
-    --radius:14px; --radius-sm:9px; --shadow: 0 12px 32px -12px rgba(0,0,0,0.5);
+  :root {
+    --bg: #0F0F10; --bg-2: #18181B; --surface: #1B1B1E; --surface-2: #232326;
+    --ink: #F1EDE4; --ink-soft: #9C978C; --line: #2A2A2D; --line-strong: #38383C;
+    --red: #C6685A; --blue: #7C9BC2; --brass: #C7A15C; --green: #7FAE8E;
+    --warn-tint: rgba(199,161,92,0.14); --danger-tint: rgba(198,104,90,0.15); --radius: 12px; --radius-sm: 8px;
     color-scheme: dark;
-  }
-  html[data-theme="light"]{
-    --bg:#F3EFE6; --bg-2:#EAE3D3; --surface:#FBF9F4; --surface-2:#F2EDE1;
-    --ink:#221F1A; --ink-soft:#726B5E; --line:#E2DACA; --line-strong:#CFC3AA;
-    --red:#AD4A3B; --red-dark:#8F332C; --blue:#3E5F8C; --brass:#9C7530;
-    --brass-light:#B68F42; --green:#3E7A54; --green-light:#4E9268;
-    --danger-tint: rgba(173,74,59,0.09); --warn-tint: rgba(156,117,48,0.10);
-    --success-tint: rgba(62,122,84,0.12); --on-btn:#FBF9F4;
-    --shadow: 0 8px 24px -12px rgba(40,32,16,0.18);
-    color-scheme: light;
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin:0; padding:0; width:100%; min-height:100vh; font-family:'IBM Plex Sans', sans-serif; background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
-  button, input, select { font-family:inherit; touch-action: manipulation; }
-  button { cursor:pointer; }
+  html, body { margin:0; padding:0; width:100%; min-height:100vh; font-family:'IBM Plex Sans', sans-serif; background:var(--bg); color:var(--ink); }
+  button, input, select, textarea { font-family:inherit; touch-action: manipulation; }
 
-  /* App Layout & Desktop Adaptivity */
-  #root { width: 100%; max-width: 900px; margin: 0 auto; min-height: 100vh; padding-bottom: 90px; }
-  @media (min-width: 768px) {
-    #root { padding-top: 20px; }
-    .stats-grid { grid-template-columns: repeat(3, 1fr) !important; }
-    .edit-grid { grid-template-columns: repeat(2, 1fr); }
-    .bottom-nav { border-radius: var(--radius); margin-bottom: 12px; }
-  }
+  #root { width: 100%; max-width: 1000px; margin: 0 auto; min-height: 100vh; padding-bottom: 80px; }
+  @media (min-width: 768px) { #root { padding-top: 16px; } }
 
-  .fade-in { animation: fadeIn .25s ease-out; }
+  .fade-in { animation: fadeIn .2s ease-out; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
   /* Header & Navigation */
   .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
-  .topbar .brand { display:flex; align-items:center; gap:10px; }
-  .brand h1 { font-family:'Fraunces', serif; font-size:18px; margin:0; color:var(--ink); }
-  .role-chip { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--brass); font-weight:600; }
-  .topbar-right { display:flex; align-items:center; gap:10px; }
+  .role-chip { font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:600; letter-spacing:0.05em; }
 
-  .bottom-nav { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:900px; display:flex; background:var(--surface); border-top:1px solid var(--line); z-index:30; }
-  .nav-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 4px; background:none; border:none; color:var(--ink-soft); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; position:relative; }
-  .nav-item.active { color:var(--brass); font-weight:600; }
-  .nav-dot { position:absolute; top:8px; right:30%; width:7px; height:7px; border-radius:50%; background:var(--red); }
+  .nav-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 20px; background:var(--bg-2); border-bottom:1px solid var(--line); }
+  .tab-btn { padding:8px 14px; border:1px solid var(--line-strong); border-radius:var(--radius-sm); background:transparent; color:var(--ink-soft); font-size:12px; flex:none; cursor:pointer; }
+  .tab-btn.active { background:var(--brass); color:#100F0D; border-color:var(--brass); font-weight:600; }
 
-  /* Content Components */
+  /* Grid & Panels */
   .content { padding:20px; }
-  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:14px; box-shadow:var(--shadow); }
-  .stats-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:20px; }
-  .stat-card { background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
+  .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:20px; }
+  .stat-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
   .stat-label { font-size:11px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px; }
   .stat-value { font-family:'IBM Plex Mono', monospace; font-size:20px; font-weight:600; color:var(--green); }
-  
-  /* Controls & Forms */
+
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:16px; }
   .field { margin-bottom:12px; }
-  .field-label { font-size:11px; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:6px; letter-spacing:0.05em; }
-  input[type=text], input[type=password], input[type=number], input[type=date], select { width:100%; border:1px solid var(--line-strong); background:var(--bg-2); padding:12px; font-size:15px; color:var(--ink); border-radius:var(--radius-sm); outline:none; }
-  input:focus, select:focus { border-color:var(--brass); }
+  .field-label { font-size:11px; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:6px; }
   
-  .btn { border:none; background:var(--ink); color:var(--bg); padding:12px 16px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; border-radius:var(--radius-sm); font-weight:600; width:100%; margin-top:8px; transition:opacity .15s; }
-  .btn:active { opacity:0.85; }
-  .btn.gold { background:var(--brass); color:var(--on-btn); }
+  input[type=text], input[type=password], input[type=number], input[type=date], select, textarea { width:100%; border:1px solid var(--line-strong); background:var(--bg-2); padding:10px 12px; font-size:14px; color:var(--ink); border-radius:var(--radius-sm); outline:none; }
+  input:focus, select:focus, textarea:focus { border-color:var(--brass); }
+
+  .btn { border:none; background:var(--ink); color:var(--bg); padding:10px 16px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; border-radius:var(--radius-sm); font-weight:600; width:100%; cursor:pointer; margin-top:6px; }
+  .btn.gold { background:var(--brass); color:#100F0D; }
   .btn.blue { background:var(--blue); color:#fff; }
   .btn.green { background:var(--green); color:#fff; }
   .btn.red { background:var(--red); color:#fff; }
   .btn.outline { background:transparent; border:1px solid var(--line-strong); color:var(--ink); }
   .btn.small { width:auto; padding:6px 12px; font-size:11px; margin:0; }
 
-  /* Public Download Page UI */
-  .public-wrap { min-height:80vh; display:flex; flex-direction:column; align-items:center; justify-content:center; max-width:420px; margin:0 auto; padding:20px; text-align:center; }
-  .photo-download-card { width:100%; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); padding:16px; margin-top:16px; text-align:left; }
-  .photo-download-card img { width:100%; height:220px; object-fit:cover; border-radius:var(--radius-sm); margin-bottom:12px; }
+  .stock-badge { display:inline-block; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600; margin-left:6px; }
+  .stock-badge.low { background:var(--danger-tint); color:var(--red); border:1px solid var(--red); }
+  .stock-badge.ok { background:rgba(127,174,142,0.15); color:var(--green); border:1px solid var(--green); }
 
-  /* Point Chips & List items */
-  .point-select { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:14px; }
-  .point-chip { padding:8px 14px; border:1px solid var(--line-strong); border-radius:var(--radius); background:transparent; color:var(--ink-soft); font-size:12px; flex:none; }
-  .point-chip.active { background:var(--brass); color:var(--on-btn); border-color:var(--brass); font-weight:600; }
-  .user-row { border:1px solid var(--line); border-radius:var(--radius); padding:14px; background:var(--surface); margin-bottom:10px; }
   .payout-card { border:1px solid var(--brass); background:var(--warn-tint); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px; }
+  .public-wrap { min-height:80vh; display:flex; flex-direction:column; align-items:center; justify-content:center; max-width:420px; margin:0 auto; padding:20px; text-align:center; }
 
-  #toast { position:fixed; bottom:85px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-family:'IBM Plex Mono', monospace; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s; }
+  /* Chat styles */
+  .chat-box { max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: var(--bg-2); border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .chat-msg { background: var(--surface); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); }
+  .chat-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; }
+  .chat-text { font-size: 13px; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-family:'IBM Plex Mono', monospace; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s; }
   #toast.show { opacity:1; }
   #toast.err { background:var(--red); color:#fff; }
 </style>
 </head>
 <body>
 
-<div id="root"><div style="text-align:center; padding:50px; color:var(--ink-soft);">Загрузка системы...</div></div>
+<div id="root"></div>
 <div id="toast"></div>
 
 <script>
-const STORE_KEY = 'photo_magnet_app_v2';
+const STORE_KEY = 'photo_app_v8_seasons';
 const money = n => (Math.round(n||0)).toLocaleString('ru-RU') + ' ₽';
 const uid = () => Math.random().toString(36).slice(2, 9);
 const todayStr = () => new Date().toISOString().slice(0, 10);
+const nowFormatted = () => new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
 function defaultState() {
   return {
+    masterPassword: '12345',
+    currentSeason: new Date().getFullYear().toString(),
     users: [
-      { id: 'owner_1', username: 'Owner', password: '123', role: 'owner', status: 'approved', salaryBalance: 0 }
+      { id: 'owner_1', username: 'Owner', password: '123', role: 'owner', salaryBalance: 0 }
     ],
     points: [
-      { id: 'pt_1', name: 'Центральная точка', revenue: 0, small: 50, big: 50, salaryPercent: 10 }
+      { id: 'pt_1', name: 'Главная точка', revenue: 0, small: 100, big: 100, salaryPercent: 10 }
     ],
     salesEntries: [],
     purchaseEntries: [],
-    payoutRequests: [], // { id, userId, username, amount, type, date, status }
-    digitalPhotos: []   // { id, code, photoUrl, uploadedBy, pointId, downloaded: false, createdAt }
+    payoutRequests: [],
+    digitalPhotos: [],
+    archivedSeasons: [],
+    chatMessages: []
   };
 }
 
 let state = null;
-let session = { userId: null, currentTab: 'download_public' };
+let session = { userId: null, currentTab: 'download_public', ownerSubTab: 'overview', userSubTab: 'main' };
 
 function toast(msg, isErr) {
   const t = document.getElementById('toast');
@@ -134,20 +115,23 @@ function toast(msg, isErr) {
   toast._h = setTimeout(() => t.className = '', 2800);
 }
 
-/* LocalStorage Engine */
 function loadData() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     state = raw ? JSON.parse(raw) : defaultState();
+    if(!state.masterPassword) state.masterPassword = '12345';
+    if(!state.currentSeason) state.currentSeason = new Date().getFullYear().toString();
+    if(!state.archivedSeasons) state.archivedSeasons = [];
+    if(!state.chatMessages) state.chatMessages = [];
   } catch(e) { state = defaultState(); }
 }
+
 function saveData() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e){ toast('Ошибка записи данных', true); }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e){ toast('Ошибка сохранения', true); }
 }
 
 function currentUser() { return state.users.find(u => u.id === session.userId) || null; }
 
-/* RENDER LOGIC */
 function render() {
   const root = document.getElementById('root');
   const user = currentUser();
@@ -167,57 +151,65 @@ function render() {
   else if (user.role === 'buyer') root.innerHTML = renderBuyerDashboard(user);
 }
 
-/* 1. PUBLIC DOWNLOAD PAGE */
+/* PUBLIC DOWNLOAD PAGE */
 function renderPublicDownloadPage() {
   return `
   <div class="public-wrap fade-in">
-    <h1 style="font-family:'Fraunces',serif; margin-bottom:6px;">Получение Фотографий</h1>
-    <p style="color:var(--ink-soft); font-size:13px; margin-top:0;">Введите код заказа, предоставленный продавцом</p>
-    <div style="width:100%; margin-top:14px;">
-      <input type="text" id="photoCodeInput" placeholder="Например: 1024" style="text-align:center; font-size:20px; font-weight:600; letter-spacing:0.1em;">
+    <h2>Скачать Фотографии</h2>
+    <p style="color:var(--ink-soft); font-size:13px;">Введите код заказа для получения фотографий</p>
+    <div style="width:100%; margin:16px 0;">
+      <input type="text" id="photoCodeInput" placeholder="Код заказа (например 1024)" style="text-align:center; font-size:18px;">
       <button class="btn gold" onclick="searchPhotoByCode()">Найти фото</button>
     </div>
     <div id="photoSearchResult"></div>
-    <div style="margin-top:30px; border-top:1px solid var(--line); padding-top:20px; width:100%;">
-      <button class="btn outline" onclick="session.currentTab = 'login'; render();">Вход для сотрудников</button>
+    <div style="margin-top:24px; font-size:13px; color:var(--ink-soft); background:var(--surface); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--line); width:100%;">
+      Возникли проблемы или ошибки?<br>
+      Обратная связь: <a href="tel:+79256860074" style="color:var(--brass); text-decoration:none; font-weight:600;">+7 925 686 00 74</a>
+    </div>
+    <div style="margin-top:20px; border-top:1px solid var(--line); padding-top:20px; width:100%;">
+      <button class="btn outline" onclick="session.currentTab='login'; render();">Вход для персонала</button>
     </div>
   </div>`;
 }
 
 function searchPhotoByCode() {
   const code = document.getElementById('photoCodeInput').value.trim();
-  const resContainer = document.getElementById('photoSearchResult');
-  if(!code) { toast('Введите код', true); return; }
+  const res = document.getElementById('photoSearchResult');
+  if(!code) return toast('Введите код', true);
 
   const photos = state.digitalPhotos.filter(p => p.code === code);
   if(!photos.length) {
-    resContainer.innerHTML = `<p style="color:var(--red); margin-top:16px;">Фотографии с кодом "${code}" не найдены или были удалены.</p>`;
+    res.innerHTML = `<p style="color:var(--red); margin-top:12px;">Фотографии не найдены</p>`;
     return;
   }
 
-  // Mark downloaded
   photos.forEach(p => p.downloaded = true);
   saveData();
 
-  resContainer.innerHTML = photos.map(p => `
-    <div class="photo-download-card fade-in">
-      <img src="${p.photoUrl}" alt="Цифровое фото">
-      <a href="${p.photoUrl}" download="Photo_${p.code}.jpg" class="btn green" style="display:block; text-align:center; text-decoration:none;">Скачать оригинал</a>
+  res.innerHTML = `
+    <div style="margin-top:16px; width:100%;">
+      <p style="font-size:13px; color:var(--green); font-weight:600; margin-bottom:12px;">Найдено снимков: ${photos.length}</p>
+      ${photos.map((p, idx) => `
+        <div class="panel fade-in" style="margin-bottom:12px; text-align:left;">
+          <img src="${p.photoUrl}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:10px;">
+          <a href="${p.photoUrl}" download="Photo_${p.code}_${idx+1}.jpg" class="btn green" style="display:block; text-align:center; text-decoration:none;">Скачать фото №${idx+1}</a>
+        </div>
+      `).join('')}
     </div>
-  `).join('');
+  `;
 }
 
-/* 2. AUTHENTICATION (NO OWNER HINT) */
+/* AUTHENTICATION */
 function renderAuthPage() {
   return `
   <div class="public-wrap fade-in">
-    <h2 style="font-family:'Fraunces',serif; margin-bottom:10px;">Авторизация</h2>
+    <h2>Авторизация</h2>
     <div class="panel" style="width:100%;">
       <div class="field"><label class="field-label">Логин</label><input type="text" id="loginUser"></div>
       <div class="field"><label class="field-label">Пароль</label><input type="password" id="loginPass"></div>
-      <button class="btn gold" onclick="handleLogin()">Войти в кабинет</button>
+      <button class="btn gold" onclick="handleLogin()">Войти</button>
     </div>
-    <button class="btn outline" onclick="session.currentTab='download_public'; render();">← На страницу скачивания фото</button>
+    <button class="btn outline" onclick="session.currentTab='download_public'; render();">На страницу скачивания</button>
   </div>`;
 }
 
@@ -226,69 +218,224 @@ function handleLogin() {
   const p = document.getElementById('loginPass').value;
   const user = state.users.find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p);
   
-  if(!user) { toast('Неверный логин или пароль', true); return; }
+  if(!user) return toast('Неверный логин или пароль', true);
   session.userId = user.id;
-  session.currentTab = user.role === 'owner' ? 'overview' : 'work';
+  session.currentTab = 'main';
+  session.userSubTab = 'main';
   render();
 }
 
-/* 3. EMPLOYEE DASHBOARD (Сотрудник на 1 точке, отчёт, зарплата, фото) */
-function renderEmployeeDashboard(user) {
-  const assignedPointId = user.assignedPoints && user.assignedPoints[0];
-  const point = state.points.find(p => p.id === assignedPointId);
+/* ЧАТ СОТРУДНИКОВ */
+function renderChatSection() {
+  const user = currentUser();
+  return `
+  <div class="panel fade-in">
+    <h3>Рабочий чат сотрудников</h3>
+    <div class="chat-box" id="chatBox">
+      ${!state.chatMessages.length ? '<p style="font-size:12px; color:var(--ink-soft); text-align:center;">Сообщений пока нет</p>' : 
+        state.chatMessages.map(m => `
+          <div class="chat-msg">
+            <div class="chat-header">
+              <b>${m.username} (${m.role === 'owner' ? 'Владелец' : m.role === 'employee' ? 'Продавец' : 'Закупщик'})</b>
+              <span>${m.time} ${user && user.role === 'owner' ? `<button style="background:none; border:none; color:var(--red); cursor:pointer; font-size:11px;" onclick="deleteChatMessage('${m.id}')">✕</button>` : ''}</span>
+            </div>
+            <div class="chat-text">${m.text}</div>
+          </div>
+        `).join('')}
+    </div>
+    <div class="field">
+      <textarea id="chatInput" rows="2" placeholder="Напишите сообщение..."></textarea>
+    </div>
+    <button class="btn gold" onclick="sendChatMessage()">Отправить</button>
+  </div>`;
+}
 
-  if(!point) {
-    return `<div class="topbar"><h1>Кабинет сотрудника</h1><button class="btn small outline" onclick="logout()">Выйти</button></div>
-    <div class="content"><div class="panel">Владелец пока не привязал вас к точке. Обратитесь к администратору.</div></div>`;
-  }
+function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return toast('Введите текст сообщения', true);
+
+  const user = currentUser();
+  state.chatMessages.push({
+    id: uid(),
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    text: text,
+    time: nowFormatted()
+  });
+
+  saveData();
+  render();
+  setTimeout(() => {
+    const chatBox = document.getElementById('chatBox');
+    if(chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+  }, 50);
+}
+
+function deleteChatMessage(id) {
+  state.chatMessages = state.chatMessages.filter(m => m.id !== id);
+  saveData();
+  render();
+}
+
+/* ОБЩИЙ БЛОК ЛИЧНОГО КАБИНЕТА */
+function renderProfileCabinet(user) {
+  return `
+  <div class="panel fade-in" style="border-color:var(--brass);">
+    <h3>Личный кабинет: ${user.username}</h3>
+    <p style="font-size:12px; color:var(--ink-soft); margin-bottom:16px;">
+      Роль: <b style="color:var(--ink);">${user.role === 'owner' ? 'Владелец' : user.role === 'employee' ? 'Продавец' : 'Закупщик'}</b>
+    </p>
+
+    <div class="panel" style="background:var(--bg-2);">
+      <h4 style="margin-top:0;">Смена пароля аккаунта</h4>
+      <div class="field"><label class="field-label">Текущий пароль</label><input type="password" id="currPassword"></div>
+      <div class="field"><label class="field-label">Новый пароль</label><input type="password" id="newPassword"></div>
+      <div class="field"><label class="field-label">Повторите новый пароль</label><input type="password" id="confirmPassword"></div>
+      <button class="btn gold" onclick="changeMyPassword()">Сохранить новый пароль</button>
+    </div>
+
+    ${user.role === 'owner' ? `
+    <div class="panel" style="background:var(--bg-2); border-color:var(--red);">
+      <h4 style="margin-top:0; color:var(--red);">Безопасность: Сбросовый Мастер-пароль</h4>
+      <p style="font-size:11px; color:var(--ink-soft);">Специальный пароль для подтверждения полного сброса данных или смены сезона.</p>
+      <div class="field"><label class="field-label">Текущий Мастер-пароль</label><input type="password" id="currMasterPass"></div>
+      <div class="field"><label class="field-label">Новый Мастер-пароль</label><input type="password" id="newMasterPass"></div>
+      <button class="btn red" onclick="changeMasterPassword()">Изменить Мастер-пароль</button>
+    </div>
+    ` : ''}
+  </div>`;
+}
+
+function changeMyPassword() {
+  const curr = document.getElementById('currPassword').value;
+  const newP = document.getElementById('newPassword').value;
+  const confP = document.getElementById('confirmPassword').value;
+
+  const user = currentUser();
+  if(!curr || !newP || !confP) return toast('Заполните все поля', true);
+  if(user.password !== curr) return toast('Неверный текущий пароль', true);
+  if(newP !== confP) return toast('Новые пароли не совпадают', true);
+
+  user.password = newP;
+  saveData();
+  toast('Пароль аккаунта изменён!');
+}
+
+function changeMasterPassword() {
+  const curr = document.getElementById('currMasterPass').value;
+  const newP = document.getElementById('newMasterPass').value;
+
+  if(curr !== state.masterPassword) return toast('Неверный текущий мастер-пароль', true);
+  if(!newP || newP.length < 3) return toast('Пароль слишком короткий', true);
+
+  state.masterPassword = newP;
+  saveData();
+  toast('Мастер-пароль сброса изменен!');
+  render();
+}
+
+/* EMPLOYEE DASHBOARD */
+function renderEmployeeDashboard(user) {
+  const allowedPoints = state.points.filter(p => user.assignedPoints && user.assignedPoints.includes(p.id));
+  const selectedPtId = session.selectedEmployeePointId || (allowedPoints[0] && allowedPoints[0].id);
+  const point = state.points.find(p => p.id === selectedPtId);
 
   return `
   <div class="topbar">
-    <div><h1>${point.name}</h1><span class="role-chip">Продавец: ${user.username}</span></div>
-    <button class="btn small outline" onclick="logout()">Выйти</button>
+    <div><b>${point ? point.name : 'Продавец'}</b> <span class="role-chip">(${user.username})</span></div>
+    <div>
+      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='chat'?'main':'chat'); render();">
+        ${session.userSubTab === 'chat' ? 'Главная' : 'Чат'}
+      </button>
+      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='profile'?'main':'profile'); render();">
+        ${session.userSubTab === 'profile' ? 'Назад' : 'Профиль'}
+      </button>
+      <button class="btn small outline" onclick="logout()">Выйти</button>
+    </div>
   </div>
   <div class="content fade-in">
-    <!-- Баланс и Зарплата -->
+    ${session.userSubTab === 'profile' ? renderProfileCabinet(user) : ''}
+    ${session.userSubTab === 'chat' ? renderChatSection() : ''}
+    ${session.userSubTab === 'main' ? renderEmployeeMainView(user, allowedPoints, point) : ''}
+  </div>`;
+}
+
+function renderEmployeeMainView(user, allowedPoints, point) {
+  if(!allowedPoints.length) {
+    return `<div class="panel">Вам не назначена ни одна точка. Обратитесь к владельцу.</div>`;
+  }
+
+  const myPhotos = state.digitalPhotos.filter(p => p.uploadedBy === user.username);
+  const myDownloadedCount = myPhotos.filter(p => p.downloaded).length;
+
+  return `
     <div class="panel" style="border-color:var(--brass);">
-      <div class="stat-label">Мой Баланс Зарплаты</div>
-      <div class="stat-value" style="font-size:24px;">${money(user.salaryBalance || 0)}</div>
-      <p style="font-size:11px; color:var(--ink-soft); margin:4px 0 10px;">Процент точки: ${point.salaryPercent||0}% с продаж</p>
-      <button class="btn small gold" onclick="requestFullBalancePayout('${user.id}')">Запросить вывод всего баланса</button>
+      <div class="stat-label">Баланс Зарплаты (${state.currentSeason} г.)</div>
+      <div class="stat-value">${money(user.salaryBalance || 0)}</div>
+      
+      <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label class="field-label">Запросить выплату (укажите сумму):</label>
+          <input type="number" id="empPayoutAmount" value="${user.salaryBalance || 0}">
+        </div>
+        <button class="btn small gold" onclick="requestCustomBalancePayout('${user.id}')">Запросить выплату</button>
+      </div>
     </div>
 
-    <!-- Заполнение отчета -->
+    ${allowedPoints.length > 1 ? `
+    <div class="nav-tabs" style="padding:0 0 12px 0; background:transparent;">
+      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedEmployeePointId='${p.id}'; render();">${p.name}</button>`).join('')}
+    </div>
+    ` : ''}
+
     <div class="panel">
-      <h3 style="margin-top:0;">Сдать отчет за сегодня</h3>
-      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev" placeholder="0"></div>
+      <h3>Отчет за день: ${point.name}</h3>
+      <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="empDate" value="${todayStr()}"></div>
+      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev"></div>
       <div style="display:flex; gap:10px;">
-        <div class="field" style="flex:1;"><label class="field-label">Продано мал. (шт)</label><input type="number" id="empSmall" placeholder="0"></div>
-        <div class="field" style="flex:1;"><label class="field-label">Продано бол. (шт)</label><input type="number" id="empBig" placeholder="0"></div>
+        <div class="field" style="flex:1;"><label class="field-label">Продано мал.</label><input type="number" id="empSm" value="0"></div>
+        <div class="field" style="flex:1;"><label class="field-label">Продано бол.</label><input type="number" id="empBg" value="0"></div>
       </div>
       <button class="btn green" onclick="submitEmployeeReport('${point.id}')">Отправить отчет</button>
     </div>
 
-    <!-- Загрузка фото для покупателей -->
     <div class="panel">
-      <h3 style="margin-top:0;">Загрузка цифровых фото</h3>
-      <div class="field"><label class="field-label">Код заказа (выдайте покупателю)</label><input type="text" id="uploadCode" placeholder="1024"></div>
-      <div class="field"><label class="field-label">Выбрать файл</label><input type="file" id="uploadFile" accept="image/*"></div>
-      <button class="btn blue" onclick="uploadDigitalPhoto('${point.id}')">Загрузить фото</button>
+      <h3>Загрузка фото для покупателя - ${point.name}</h3>
+      <div class="field"><label class="field-label">Код заказа</label><input type="text" id="uploadCode" placeholder="например 1024"></div>
+      <div class="field"><label class="field-label">Выбрать фото</label><input type="file" id="uploadFile" accept="image/*" multiple></div>
+      <button class="btn blue" onclick="uploadDigitalPhoto('${point.id}', 'uploadCode', 'uploadFile')">Загрузить выбранные фото</button>
     </div>
 
-    <!-- Управление загруженными фото -->
     <div class="panel">
-      <h3>Загруженные фото точки</h3>
-      ${renderPhotoListForPoint(point.id)}
-    </div>
-  </div>`;
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">Загруженные вами фото (${myPhotos.length})</h3>
+        ${myDownloadedCount > 0 ? `<button class="btn small red" onclick="deleteMyDownloadedPhotos()">Удалить скачанные (${myDownloadedCount})</button>` : ''}
+      </div>
+      ${!myPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Вы пока не загружали фото</p>' :
+        myPhotos.map(p => {
+          const pt = state.points.find(x => x.id === p.pointId);
+          return `
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+            <div>
+              <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+              <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
+                ${p.downloaded ? 'Скачано' : 'Ожидает'}
+              </div>
+            </div>
+            <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+          </div>`;
+        }).join('')}
+    </div>`;
 }
 
 function submitEmployeeReport(pointId) {
+  const reportDate = document.getElementById('empDate').value || todayStr();
   const rev = parseFloat(document.getElementById('empRev').value) || 0;
-  const small = parseInt(document.getElementById('empSmall').value) || 0;
-  const big = parseInt(document.getElementById('empBig').value) || 0;
-  
-  if(rev <= 0) { toast('Укажите корректную выручку', true); return; }
+  const small = parseInt(document.getElementById('empSm').value) || 0;
+  const big = parseInt(document.getElementById('empBg').value) || 0;
+  if(rev <= 0) return toast('Введите корректную выручку', true);
 
   const point = state.points.find(p => p.id === pointId);
   const user = currentUser();
@@ -297,114 +444,152 @@ function submitEmployeeReport(pointId) {
   point.small = Math.max(0, point.small - small);
   point.big = Math.max(0, point.big - big);
 
-  // Расчет зарплаты
-  const earnedSalary = Math.round(rev * ((point.salaryPercent || 0) / 100));
-  user.salaryBalance = (user.salaryBalance || 0) + earnedSalary;
+  const earned = Math.round(rev * ((point.salaryPercent || 0) / 100));
+  user.salaryBalance = (user.salaryBalance || 0) + earned;
 
-  state.salesEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, revenue: rev, userId: user.id, username: user.username });
+  state.salesEntries.unshift({ id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: user.id, username: user.username, season: state.currentSeason });
   saveData();
 
-  toast(`Отчет сохранен! Начислено зарплаты: ${money(earnedSalary)}`);
-  
-  // Предложение запросить именно эту выплату сразу
-  if(confirm(`Отчёт сдан! Начислено: ${earnedSalary} ₽. Отправить владельцу запрос на немедленную выплату за сегодня?`)) {
-    requestTodaySalaryPayout(user.id, earnedSalary);
+  if(confirm(`Отчет принят за ${reportDate}. Начислено: ${earned} ₽. Запросить выплату прямо сейчас?`)) {
+    const customAmountStr = prompt(`Укажите сумму для выплаты (Доступный баланс: ${user.salaryBalance} ₽):`, earned);
+    const amountToReq = parseFloat(customAmountStr);
+    
+    if (amountToReq && amountToReq > 0) {
+      if (amountToReq > user.salaryBalance) {
+        toast('Запрошенная сумма превышает доступный баланс!', true);
+      } else {
+        state.payoutRequests.unshift({ id: uid(), userId: user.id, username: user.username, amount: amountToReq, type: 'Выплата за день', date: reportDate, status: 'pending' });
+        saveData();
+        toast('Запрос на выплату отправлен!');
+      }
+    }
   } else {
-    render();
+    toast('Отчет сохранен!');
   }
-}
-
-function requestTodaySalaryPayout(userId, amount) {
-  state.payoutRequests.unshift({
-    id: uid(), userId, username: currentUser().username, amount, type: 'Выплата за день', date: todayStr(), status: 'pending'
-  });
-  saveData();
-  toast('Запрос на выплату за сегодня отправлен владельцу!');
   render();
 }
 
-function requestFullBalancePayout(userId) {
+function requestCustomBalancePayout(userId) {
   const u = currentUser();
-  if(!u.salaryBalance || u.salaryBalance <= 0) { toast('Ваш баланс пуст', true); return; }
+  const amountInput = parseFloat(document.getElementById('empPayoutAmount').value);
+
+  if(!u.salaryBalance || u.salaryBalance <= 0) return toast('Баланс пуст', true);
+  if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
+  if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
   
-  state.payoutRequests.unshift({
-    id: uid(), userId, username: u.username, amount: u.salaryBalance, type: 'Вывод баланса', date: todayStr(), status: 'pending'
+  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  saveData();
+  toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
+  render();
+}
+
+/* МУЛЬТИЗАГРУЗКА ФОТО С ПРОВЕРКОЙ КОДА */
+function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
+  const code = document.getElementById(codeInputId).value.trim();
+  const fileInput = document.getElementById(fileInputId);
+  const files = Array.from(fileInput.files || []);
+
+  if(!code || !files.length) return toast('Укажите код и выберите файлы', true);
+
+  const isCodeExists = state.digitalPhotos.some(p => p.code === code);
+  if(isCodeExists) {
+    alert(`Ошибка! Заказ с номером "${code}" уже существует в базе.\nПожалуйста, смените номер заказа.`);
+    toast(`Номер "${code}" уже существует! Смените номер.`, true);
+    return;
+  }
+
+  toast(`Загрузка ${files.length} фото...`);
+
+  let loadedCount = 0;
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      state.digitalPhotos.unshift({
+        id: uid(), code, photoUrl: e.target.result, uploadedBy: currentUser().username, pointId, downloaded: false, createdAt: Date.now()
+      });
+      loadedCount++;
+      if (loadedCount === files.length) {
+        saveData();
+        toast(`Успешно загружено фото: ${loadedCount}`);
+        render();
+      }
+    };
+    reader.readAsDataURL(file);
   });
-  saveData();
-  toast('Запрос на вывод всего баланса отправлен!');
-  render();
 }
 
-/* Загрузка цифрового фото */
-function uploadDigitalPhoto(pointId) {
-  const code = document.getElementById('uploadCode').value.trim();
-  const fileInput = document.getElementById('uploadFile');
-  if(!code || !fileInput.files[0]) { toast('Укажите код и выберите файл', true); return; }
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    state.digitalPhotos.unshift({
-      id: uid(), code, photoUrl: e.target.result, uploadedBy: currentUser().username, pointId, downloaded: false, createdAt: Date.now()
-    });
-    saveData();
-    toast('Фото успешно загружено');
-    render();
-  };
-  reader.readAsDataURL(fileInput.files[0]);
-}
-
-function renderPhotoListForPoint(pointId) {
-  const list = state.digitalPhotos.filter(p => p.pointId === pointId);
-  if(!list.length) return `<p style="color:var(--ink-soft); font-size:12px;">Фотографий пока нет</p>`;
-
-  return list.map(p => `
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
-      <div>
-        <b>Код: ${p.code}</b> 
-        <span style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
-          (${p.downloaded ? 'Скачано клиентом' : 'Ожидает скачивания'})
-        </span>
-      </div>
-      <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
-    </div>
-  `).join('');
-}
-
-function deleteDigitalPhoto(photoId) {
-  state.digitalPhotos = state.digitalPhotos.filter(p => p.id !== photoId);
-  saveData();
-  toast('Фото удалено с сервера');
-  render();
-}
-
-/* 4. BUYER DASHBOARD (Закупщик на много точек) */
+/* BUYER DASHBOARD */
 function renderBuyerDashboard(user) {
-  const allowedPoints = state.points.filter(p => user.assignedPoints && user.assignedPoints.includes(p.id));
+  return `
+  <div class="topbar">
+    <div><b>Закупочный кабинет</b> <span class="role-chip">(${user.username})</span></div>
+    <div>
+      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='chat'?'main':'chat'); render();">
+        ${session.userSubTab === 'chat' ? 'Главная' : 'Чат'}
+      </button>
+      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='profile'?'main':'profile'); render();">
+        ${session.userSubTab === 'profile' ? 'Назад' : 'Профиль'}
+      </button>
+      <button class="btn small outline" onclick="logout()">Выйти</button>
+    </div>
+  </div>
+  <div class="content fade-in">
+    ${session.userSubTab === 'profile' ? renderProfileCabinet(user) : ''}
+    ${session.userSubTab === 'chat' ? renderChatSection() : ''}
+    ${session.userSubTab === 'main' ? renderBuyerMainView(user) : ''}
+  </div>`;
+}
 
+function renderBuyerMainView(user) {
+  const allowedPoints = state.points.filter(p => user.assignedPoints && user.assignedPoints.includes(p.id));
   if(!allowedPoints.length) {
-    return `<div class="topbar"><h1>Кабинет закупщика</h1><button class="btn small outline" onclick="logout()">Выйти</button></div>
-    <div class="content"><div class="panel">Вам не назначена ни одна точка для закупок.</div></div>`;
+    return `<div class="panel">Вам не назначена ни одна точка.</div>`;
   }
 
   const selectedPtId = session.selectedBuyerPointId || allowedPoints[0].id;
   const point = state.points.find(p => p.id === selectedPtId);
 
   return `
-  <div class="topbar"><h1>Закупки</h1><button class="btn small outline" onclick="logout()">Выйти</button></div>
-  <div class="content fade-in">
-    <div class="point-select">
-      ${allowedPoints.map(p => `<button class="point-chip ${p.id === point.id ? 'active' : ''}" onclick="session.selectedBuyerPointId='${p.id}'; render();">${p.name}</button>`).join('')}
-    </div>
-    <div class="panel">
-      <h3>Закупка для: ${point.name}</h3>
-      <div style="display:flex; gap:10px; margin-bottom:10px;">
-        <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="buySm" placeholder="0"></div>
-        <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="buyBg" placeholder="0"></div>
+    <div class="panel" style="border-color:var(--brass);">
+      <div class="stat-label">Мой Баланс Зарплаты</div>
+      <div class="stat-value">${money(user.salaryBalance || 0)}</div>
+      
+      <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label class="field-label">Запросить выплату (укажите сумму):</label>
+          <input type="number" id="buyerPayoutAmount" value="${user.salaryBalance || 0}">
+        </div>
+        <button class="btn small gold" onclick="requestCustomBalancePayoutBuyer('${user.id}')">Запросить вывод баланса</button>
       </div>
-      <div class="field"><label class="field-label">Потрачено средств, ₽</label><input type="number" id="buyCost" placeholder="0"></div>
-      <button class="btn blue" onclick="submitPurchase('${point.id}')">Провести закупку</button>
     </div>
-  </div>`;
+
+    <div class="nav-tabs" style="padding:0 0 10px 0; background:transparent;">
+      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedBuyerPointId='${p.id}'; render();">${p.name}</button>`).join('')}
+    </div>
+
+    <div class="panel">
+      <h3>Оформить закупку на точку: ${point.name}</h3>
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="buySm" value="0"></div>
+        <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="buyBg" value="0"></div>
+      </div>
+      <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="buyCost" value="0"></div>
+      <button class="btn blue" onclick="submitPurchase('${point.id}')">Внести закупку</button>
+    </div>`;
+}
+
+function requestCustomBalancePayoutBuyer(userId) {
+  const u = currentUser();
+  const amountInput = parseFloat(document.getElementById('buyerPayoutAmount').value);
+
+  if(!u.salaryBalance || u.salaryBalance <= 0) return toast('Баланс пуст', true);
+  if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
+  if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
+  
+  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  saveData();
+  toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
+  render();
 }
 
 function submitPurchase(pointId) {
@@ -417,203 +602,687 @@ function submitPurchase(pointId) {
   point.big += big;
   point.revenue -= cost;
 
-  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: currentUser().username });
+  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: currentUser().username, season: state.currentSeason });
   saveData();
-  toast('Закупка успешно зафиксирована');
+  toast('Закупка проведена');
   render();
 }
 
-/* 5. OWNER DASHBOARD (Управление точками, сотрудниками, процентами и запросами выплат) */
+/* OWNER DASHBOARD */
 function renderOwnerDashboard(user) {
   return `
   <div class="topbar">
-    <div><h1>Панель Владельца</h1><span class="role-chip">${user.username}</span></div>
+    <div><b>Панель Владельца</b> <span class="role-chip">(${state.currentSeason} Сезон)</span></div>
     <button class="btn small outline" onclick="logout()">Выйти</button>
   </div>
+  <div class="nav-tabs">
+    <button class="tab-btn ${session.ownerSubTab==='overview'?'active':''}" onclick="session.ownerSubTab='overview';render();">Обзор</button>
+    <button class="tab-btn ${session.ownerSubTab==='owner_report'?'active':''}" onclick="session.ownerSubTab='owner_report';render();">Сдать Отчет</button>
+    <button class="tab-btn ${session.ownerSubTab==='purchases'?'active':''}" onclick="session.ownerSubTab='purchases';render();">Закупки</button>
+    <button class="tab-btn ${session.ownerSubTab==='points'?'active':''}" onclick="session.ownerSubTab='points';render();">Точки</button>
+    <button class="tab-btn ${session.ownerSubTab==='team'?'active':''}" onclick="session.ownerSubTab='team';render();">Команда и Балансы</button>
+    <button class="tab-btn ${session.ownerSubTab==='logs'?'active':''}" onclick="session.ownerSubTab='logs';render();">Отчеты года</button>
+    <button class="tab-btn ${session.ownerSubTab==='archive'?'active':''}" onclick="session.ownerSubTab='archive';render();">Архив сезонов</button>
+    <button class="tab-btn ${session.ownerSubTab==='photos'?'active':''}" onclick="session.ownerSubTab='photos';render();">База Фото</button>
+    <button class="tab-btn ${session.ownerSubTab==='chat'?'active':''}" onclick="session.ownerSubTab='chat';render();">Чат</button>
+    <button class="tab-btn ${session.ownerSubTab==='seasons_control'?'active':''}" onclick="session.ownerSubTab='seasons_control';render();" style="border-color:var(--red); color:var(--red);">Смена/Сброс Года</button>
+    <button class="tab-btn ${session.ownerSubTab==='profile'?'active':''}" onclick="session.ownerSubTab='profile';render();">Профиль</button>
+  </div>
   <div class="content fade-in">
-    <!-- Навигационные вкладки -->
-    <div class="point-select">
-      <button class="point-chip ${session.currentTab==='overview'?'active':''}" onclick="session.currentTab='overview';render();">Обзор и Точки</button>
-      <button class="point-chip ${session.currentTab==='team'?'active':''}" onclick="session.currentTab='team';render();">Команда и Выплаты</button>
-      <button class="point-chip ${session.currentTab==='photos'?'active':''}" onclick="session.currentTab='photos';render();">Все Фотографии</button>
-    </div>
-
-    ${session.currentTab === 'overview' ? renderOwnerOverview() : ''}
-    ${session.currentTab === 'team' ? renderOwnerTeam() : ''}
-    ${session.currentTab === 'photos' ? renderOwnerPhotos() : ''}
+    ${session.ownerSubTab === 'overview' ? renderOwnerOverviewTab() : ''}
+    ${session.ownerSubTab === 'owner_report' ? renderOwnerReportTab() : ''}
+    ${session.ownerSubTab === 'purchases' ? renderOwnerPurchasesTab() : ''}
+    ${session.ownerSubTab === 'points' ? renderOwnerPointsTab() : ''}
+    ${session.ownerSubTab === 'team' ? renderOwnerTeamTab() : ''}
+    ${session.ownerSubTab === 'logs' ? renderOwnerLogsTab() : ''}
+    ${session.ownerSubTab === 'archive' ? renderOwnerArchiveTab() : ''}
+    ${session.ownerSubTab === 'photos' ? renderOwnerPhotosTab() : ''}
+    ${session.ownerSubTab === 'chat' ? renderChatSection() : ''}
+    ${session.ownerSubTab === 'seasons_control' ? renderOwnerSeasonsControlTab() : ''}
+    ${session.ownerSubTab === 'profile' ? renderProfileCabinet(user) : ''}
   </div>`;
 }
 
-function renderOwnerOverview() {
+function renderOwnerOverviewTab() {
   const totalRev = state.points.reduce((s, p) => s + p.revenue, 0);
+  const totalPurchases = state.purchaseEntries.reduce((s, p) => s + p.cost, 0);
+  const pendingPayouts = state.users.reduce((s, u) => s + (u.salaryBalance || 0), 0);
 
   return `
   <div class="stats-grid">
-    <div class="stat-card"><div class="stat-label">Чистая прибыль</div><div class="stat-value">${money(totalRev)}</div></div>
-    <div class="stat-card"><div class="stat-label">Всего точек</div><div class="stat-value" style="color:var(--blue);">${state.points.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Касса (${state.currentSeason} г.)</div><div class="stat-value">${money(totalRev)}</div></div>
+    <div class="stat-card"><div class="stat-label">Расходы на закупки</div><div class="stat-value" style="color:var(--red);">${money(totalPurchases)}</div></div>
+    <div class="stat-card"><div class="stat-label">Задолженность по зарплате</div><div class="stat-value" style="color:var(--brass);">${money(pendingPayouts)}</div></div>
   </div>
 
   <div class="panel">
-    <h3>Список точек</h3>
+    <h3>Сводка по точкам</h3>
     ${state.points.map(p => `
-      <div style="border-top:1px solid var(--line); padding:12px 0;">
-        <b style="font-size:16px;">${p.name}</b>
-        <div style="display:flex; justify-content:space-between; margin:6px 0; font-size:13px; color:var(--ink-soft);">
-          <span>Касса: ${money(p.revenue)}</span>
-          <span>Остаток: ${p.small} мал. / ${p.big} бол.</span>
+      <div style="border-bottom:1px solid var(--line); padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <b>${p.name}</b>
+          <div style="font-size:12px; color:var(--ink-soft);">
+            Остаток: ${p.small} мал. ${p.small<=10?'':''} / ${p.big} бол. ${p.big<=10?'':''}
+          </div>
         </div>
-        <div class="field" style="margin-top:8px;">
-          <label class="field-label">Процент Зарплаты продавца (%):</label>
-          <input type="number" value="${p.salaryPercent || 0}" style="width:100px; padding:6px;" onchange="updatePointSalaryPercent('${p.id}', this.value)">
-        </div>
+        <div style="font-family:'IBM Plex Mono'; font-weight:600; color:var(--green);">${money(p.revenue)}</div>
       </div>
     `).join('')}
-    <button class="btn outline" onclick="addNewPoint()">+ Добавить точку</button>
   </div>`;
 }
 
-function updatePointSalaryPercent(pointId, val) {
-  const p = state.points.find(x => x.id === pointId);
-  if(p) { p.salaryPercent = parseFloat(val) || 0; saveData(); toast('Процент обновлен'); }
+function renderOwnerReportTab() {
+  return `
+  <div class="panel">
+    <h3>Внести отчет за день (как Владелец)</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerReportPoint">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="ownerReportDate" value="${todayStr()}"></div>
+    <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="ownerReportRev" placeholder="0"></div>
+    <div style="display:flex; gap:10px;">
+      <div class="field" style="flex:1;"><label class="field-label">Продано мал. (шт)</label><input type="number" id="ownerReportSm" value="0"></div>
+      <div class="field" style="flex:1;"><label class="field-label">Продано бол. (шт)</label><input type="number" id="ownerReportBg" value="0"></div>
+    </div>
+    <button class="btn green" onclick="submitOwnerReport()">Провести отчет без зарплаты</button>
+  </div>`;
+}
+
+function submitOwnerReport() {
+  const pointId = document.getElementById('ownerReportPoint').value;
+  const reportDate = document.getElementById('ownerReportDate').value || todayStr();
+  const rev = parseFloat(document.getElementById('ownerReportRev').value) || 0;
+  const small = parseInt(document.getElementById('ownerReportSm').value) || 0;
+  const big = parseInt(document.getElementById('ownerReportBg').value) || 0;
+
+  if(!pointId || rev <= 0) return toast('Укажите точку и выручку', true);
+
+  const point = state.points.find(p => p.id === pointId);
+  point.revenue += rev;
+  point.small = Math.max(0, point.small - small);
+  point.big = Math.max(0, point.big - big);
+
+  state.salesEntries.unshift({
+    id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: currentUser().id, username: 'Владелец (Owner)', season: state.currentSeason
+  });
+  saveData();
+  toast('Отчет зафиксирован');
+  render();
+}
+
+function renderOwnerPurchasesTab() {
+  return `
+  <div class="panel">
+    <h3>Проведение закупки (как Владелец)</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerBuyPoint">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="ownerBuySm" value="0"></div>
+      <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="ownerBuyBg" value="0"></div>
+    </div>
+    <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="ownerBuyCost" value="0"></div>
+    <button class="btn blue" onclick="submitOwnerPurchase()">Внести закупку</button>
+  </div>`;
+}
+
+function submitOwnerPurchase() {
+  const pointId = document.getElementById('ownerBuyPoint').value;
+  const small = parseInt(document.getElementById('ownerBuySm').value) || 0;
+  const big = parseInt(document.getElementById('ownerBuyBg').value) || 0;
+  const cost = parseFloat(document.getElementById('ownerBuyCost').value) || 0;
+
+  const point = state.points.find(p => p.id === pointId);
+  point.small += small;
+  point.big += big;
+  point.revenue -= cost;
+
+  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: 'Владелец', season: state.currentSeason });
+  saveData();
+  toast('Закупка проведена');
+  render();
+}
+
+function renderOwnerPointsTab() {
+  return `
+  <div class="panel">
+    <h3>Редактирование точек</h3>
+    ${state.points.map(p => `
+      <div style="border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
+        <div class="field"><label class="field-label">Название точки</label><input type="text" value="${p.name}" onchange="updatePointData('${p.id}', 'name', this.value)"></div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label class="field-label">Касса (₽)</label><input type="number" value="${p.revenue}" onchange="updatePointData('${p.id}', 'revenue', parseFloat(this.value))"></div>
+          <div class="field" style="flex:1;"><label class="field-label">Зарплатный %</label><input type="number" value="${p.salaryPercent||0}" onchange="updatePointData('${p.id}', 'salaryPercent', parseFloat(this.value))"></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label class="field-label">Остаток мал.</label><input type="number" value="${p.small}" onchange="updatePointData('${p.id}', 'small', parseInt(this.value))"></div>
+          <div class="field" style="flex:1;"><label class="field-label">Остаток бол.</label><input type="number" value="${p.big}" onchange="updatePointData('${p.id}', 'big', parseInt(this.value))"></div>
+        </div>
+        <button class="btn red small" onclick="deletePoint('${p.id}')">Удалить точку</button>
+      </div>
+    `).join('')}
+    <button class="btn gold" onclick="addNewPoint()">+ Добавить точку</button>
+  </div>`;
+}
+
+function updatePointData(id, key, val) {
+  const p = state.points.find(x => x.id === id);
+  if(p) { p[key] = val; saveData(); toast('Сохранено'); }
+}
+
+function deletePoint(id) {
+  if(confirm('Удалить эту точку?')) {
+    state.points = state.points.filter(p => p.id !== id);
+    saveData();
+    render();
+  }
 }
 
 function addNewPoint() {
-  const name = prompt('Название точки:');
+  const name = prompt('Введите название точки:');
   if(!name) return;
-  state.points.push({ id: uid(), name, revenue: 0, small: 0, big: 0, salaryPercent: 10 });
+  state.points.push({ id: uid(), name, revenue:0, small:0, big:0, salaryPercent:10 });
   saveData();
   render();
 }
 
-function renderOwnerTeam() {
+function renderOwnerTeamTab() {
   const pendingRequests = state.payoutRequests.filter(r => r.status === 'pending');
 
   return `
-  <!-- Запросы на выплату -->
   <div class="panel" style="border-color:var(--brass);">
-    <h3>Запросы на выплату зарплаты (${pendingRequests.length})</h3>
-    ${!pendingRequests.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет активных запросов</p>' : 
+    <h3>Запросы на выплату (${pendingRequests.length})</h3>
+    ${!pendingRequests.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет нерассмотренных запросов</p>' : 
       pendingRequests.map(r => `
         <div class="payout-card">
-          <div><b>${r.username}</b> — <span style="color:var(--green); font-weight:600;">${money(r.amount)}</span> (${r.type})</div>
-          <div style="font-size:11px; color:var(--ink-soft);">${r.date}</div>
-          <button class="btn small green" style="margin-top:8px;" onclick="approvePayout('${r.id}')">Подтвердить выплату и списать с баланса</button>
+          <div><b>${r.username}</b> — Запросил: <span style="color:var(--green); font-weight:600;">${money(r.amount)}</span></div>
+          <div style="font-size:11px; color:var(--ink-soft);">${r.date} (${r.type})</div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn small green" onclick="approvePayout('${r.id}')">Подтвердить (${money(r.amount)})</button>
+            <button class="btn small red" onclick="rejectPayout('${r.id}')">Отказать</button>
+          </div>
         </div>
       `).join('')}
   </div>
 
-  <!-- Список работников и назначение точек -->
   <div class="panel">
-    <h3>Управление командой</h3>
+    <h3>Управление сотрудниками</h3>
     ${state.users.filter(u => u.role !== 'owner').map(u => `
-      <div class="user-row">
-        <b>${u.username}</b> (Баланс: ${money(u.salaryBalance || 0)})
+      <div style="border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <b>${u.username}</b>
+          <span>Баланс: <b style="color:var(--green); font-size:16px;">${money(u.salaryBalance||0)}</b></span>
+        </div>
+        
         <div class="field" style="margin-top:8px;">
           <label class="field-label">Роль:</label>
           <select onchange="updateUserRole('${u.id}', this.value)">
-            <option value="employee" ${u.role==='employee'?'selected':''}>Продавец (1 точка)</option>
-            <option value="buyer" ${u.role==='buyer'?'selected':''}>Закупщик (много точек)</option>
+            <option value="employee" ${u.role==='employee'?'selected':''}>Продавец</option>
+            <option value="buyer" ${u.role==='buyer'?'selected':''}>Закупщик</option>
           </select>
         </div>
+        
         <div class="field">
-          <label class="field-label">Назначенные точки:</label>
+          <label class="field-label">Доступные точки:</label>
           ${renderPointAssignmentSelector(u)}
+        </div>
+
+        <div style="background:var(--bg-2); padding:10px; border-radius:var(--radius-sm); margin:10px 0;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn small green" onclick="adjustBalancePrompt('${u.id}', 'add')">+ Премия</button>
+            <button class="btn small red" onclick="adjustBalancePrompt('${u.id}', 'sub')">- Списать</button>
+            <button class="btn small outline" onclick="manualClearBalance('${u.id}')">Обнулить</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn small gold" onclick="resetUserPasswordPrompt('${u.id}')">Сбросить пароль</button>
+          <button class="btn small red" onclick="deleteUser('${u.id}')">Удалить сотрудника</button>
         </div>
       </div>
     `).join('')}
-    <button class="btn gold" onclick="addNewUser()">+ Создать сотрудника</button>
+    <button class="btn gold" onclick="addNewUser()">+ Зарегистрировать сотрудника</button>
   </div>`;
 }
 
-function renderPointAssignmentSelector(user) {
-  if (user.role === 'employee') {
-    return `<select onchange="assignPointsToUser('${user.id}', [this.value])">
-      <option value="">-- Выберите точку --</option>
-      ${state.points.map(p => `<option value="${p.id}" ${user.assignedPoints && user.assignedPoints[0]===p.id?'selected':''}>${p.name}</option>`).join('')}
-    </select>`;
-  } else {
-    // Multi select for Buyer
-    return state.points.map(p => {
-      const checked = user.assignedPoints && user.assignedPoints.includes(p.id);
-      return `<label style="display:inline-block; margin-right:10px; font-size:12px;">
-        <input type="checkbox" ${checked?'checked':''} onchange="toggleBuyerPoint('${user.id}', '${p.id}', this.checked)"> ${p.name}
-      </label>`;
-    }).join('');
-  }
+function resetUserPasswordPrompt(userId) {
+  const u = state.users.find(x => x.id === userId);
+  const newPass = prompt(`Новый пароль для ${u.username}:`);
+  if(!newPass) return;
+  u.password = newPass;
+  saveData();
+  toast(`Пароль для ${u.username} изменен`);
 }
 
-function toggleBuyerPoint(userId, pointId, isChecked) {
+function adjustBalancePrompt(userId, action) {
+  const u = state.users.find(x => x.id === userId);
+  const amountStr = prompt(action === 'add' ? 'Сумма премии (₽):' : 'Сумма списания (₽):');
+  const amount = parseFloat(amountStr);
+  if(!amount || amount <= 0) return;
+
+  if(action === 'add') u.salaryBalance = (u.salaryBalance || 0) + amount;
+  else u.salaryBalance = Math.max(0, (u.salaryBalance || 0) - amount);
+
+  saveData();
+  render();
+}
+
+function renderPointAssignmentSelector(user) {
+  return state.points.map(p => {
+    const checked = user.assignedPoints && user.assignedPoints.includes(p.id);
+    return `<label style="display:inline-block; margin-right:10px; font-size:12px;">
+      <input type="checkbox" ${checked?'checked':''} onchange="toggleUserPoint('${user.id}', '${p.id}', this.checked)"> ${p.name}
+    </label>`;
+  }).join('');
+}
+
+function toggleUserPoint(userId, pointId, isChecked) {
   const u = state.users.find(x => x.id === userId);
   if(!u.assignedPoints) u.assignedPoints = [];
-  if(isChecked) u.assignedPoints.push(pointId);
-  else u.assignedPoints = u.assignedPoints.filter(id => id !== pointId);
+  if(isChecked) {
+    if(!u.assignedPoints.includes(pointId)) u.assignedPoints.push(pointId);
+  } else {
+    u.assignedPoints = u.assignedPoints.filter(id => id !== pointId);
+  }
   saveData();
-}
-
-function assignPointsToUser(userId, pointArray) {
-  const u = state.users.find(x => x.id === userId);
-  u.assignedPoints = pointArray;
-  saveData();
-  toast('Точка закреплена');
 }
 
 function updateUserRole(userId, role) {
   const u = state.users.find(x => x.id === userId);
   u.role = role;
-  u.assignedPoints = [];
   saveData();
   render();
 }
 
-function addNewUser() {
-  const name = prompt('Логин сотрудника:');
-  const pass = prompt('Пароль сотрудника:');
-  if(!name || !pass) return;
-  state.users.push({ id: uid(), username: name, password: pass, role: 'employee', assignedPoints: [], salaryBalance: 0 });
-  saveData();
-  render();
+function manualClearBalance(userId) {
+  const u = state.users.find(x => x.id === userId);
+  if(confirm(`Обнулить баланс ${money(u.salaryBalance||0)} сотрудника ${u.username}?`)) {
+    u.salaryBalance = 0;
+    saveData();
+    render();
+  }
 }
 
 function approvePayout(requestId) {
   const req = state.payoutRequests.find(r => r.id === requestId);
+  if (!req) return;
   const user = state.users.find(u => u.id === req.userId);
-  
-  if(user) {
-    user.salaryBalance = Math.max(0, (user.salaryBalance || 0) - req.amount);
+  if (confirm(`Выплатить ${money(req.amount)}?`)) {
+    if(user) user.salaryBalance = Math.max(0, (user.salaryBalance || 0) - req.amount);
+    state.payoutRequests = state.payoutRequests.filter(r => r.id !== requestId);
+    saveData();
+    render();
   }
-  req.status = 'approved';
-  state.payoutRequests = state.payoutRequests.filter(r => r.id !== requestId);
+}
+
+function rejectPayout(requestId) {
+  if (confirm(`Отклонить запрос?`)) {
+    state.payoutRequests = state.payoutRequests.filter(r => r.id !== requestId);
+    saveData();
+    render();
+  }
+}
+
+function addNewUser() {
+  const u = prompt('Логин сотрудника:');
+  const p = prompt('Пароль:');
+  if(!u || !p) return;
+  state.users.push({ id: uid(), username: u, password: p, role: 'employee', assignedPoints: [], salaryBalance: 0 });
   saveData();
-  toast('Выплата произведена, баланс сотрудника обнулен');
   render();
 }
 
-function renderOwnerPhotos() {
+function deleteUser(id) {
+  if(confirm('Удалить сотрудника?')) {
+    state.users = state.users.filter(u => u.id !== id);
+    saveData();
+    render();
+  }
+}
+
+/* ТЕКУЩИЕ ОТЧЕТЫ ГОДА */
+function renderOwnerLogsTab() {
   return `
   <div class="panel">
-    <h3>Все цифры и загруженные фото</h3>
-    ${!state.digitalPhotos.length ? '<p style="color:var(--ink-soft); font-size:12px;">Файлов нет</p>' :
-      state.digitalPhotos.map(p => `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:10px 0;">
+    <h3>Продажи за текущий сезон (${state.currentSeason})</h3>
+    ${!state.salesEntries.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет записей</p>' :
+      state.salesEntries.map(s => {
+        const pt = state.points.find(p => p.id === s.pointId);
+        return `<div style="border-bottom:1px solid var(--line); padding:8px 0; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <b>Код: ${p.code}</b> (${p.uploadedBy})
+            <b>${s.date}</b> — ${pt ? pt.name : 'Точка'}: <b>${money(s.revenue)}</b> (${s.small} мал / ${s.big} бол) [${s.username}]
+          </div>
+          <div>
+            <button class="btn small gold" onclick="editSaleEntryCurrent('${s.id}')">Редактировать</button>
+            <button class="btn small red" onclick="deleteSaleEntryCurrent('${s.id}')">Удалить</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>
+
+  <div class="panel">
+    <h3>Закупки за текущий сезон (${state.currentSeason})</h3>
+    ${!state.purchaseEntries.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет записей</p>' :
+      state.purchaseEntries.map(p => {
+        const pt = state.points.find(x => x.id === p.pointId);
+        return `<div style="border-bottom:1px solid var(--line); padding:8px 0; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <b>${p.date}</b> — ${pt ? pt.name : 'Точка'}: потрачено <b>${money(p.cost)}</b> (+${p.small} мал / +${p.big} бол) [${p.username}]
+          </div>
+          <div>
+            <button class="btn small red" onclick="deletePurchaseEntryCurrent('${p.id}')">Удалить</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function editSaleEntryCurrent(id) {
+  const item = state.salesEntries.find(x => x.id === id);
+  if(!item) return;
+
+  const newRev = prompt('Изменить выручку (₽):', item.revenue);
+  if(newRev === null) return;
+  const newSm = prompt('Изменить кол-во маленьких:', item.small);
+  const newBg = prompt('Изменить кол-во больших:', item.big);
+
+  item.revenue = parseFloat(newRev) || 0;
+  item.small = parseInt(newSm) || 0;
+  item.big = parseInt(newBg) || 0;
+
+  saveData();
+  toast('Запись изменена');
+  render();
+}
+
+function deleteSaleEntryCurrent(id) {
+  if(confirm('Удалить запись продажи?')) {
+    state.salesEntries = state.salesEntries.filter(x => x.id !== id);
+    saveData();
+    render();
+  }
+}
+
+function deletePurchaseEntryCurrent(id) {
+  if(confirm('Удалить запись закупки?')) {
+    state.purchaseEntries = state.purchaseEntries.filter(x => x.id !== id);
+    saveData();
+    render();
+  }
+}
+
+/* ВЛАДЕЛЕЦ - АРХИВ ПРОШЛЫХ СЕЗОНОВ */
+function renderOwnerArchiveTab() {
+  if(!state.archivedSeasons.length) {
+    return `<div class="panel"><h3>Архив сезонов пуст</h3><p style="font-size:12px; color:var(--ink-soft);">Здесь будут храниться отчеты прошлых лет после завершения сезонов.</p></div>`;
+  }
+
+  return `
+  <div class="panel">
+    <h3>Архив Прошлых Сезонов</h3>
+    ${state.archivedSeasons.map(archive => `
+      <div style="border:1px solid var(--brass); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px;">
+        <h4 style="margin:0 0 10px 0; color:var(--brass);">Сезон: ${archive.seasonName}</h4>
+        
+        <b>Продажи (${archive.salesEntries ? archive.salesEntries.length : 0}):</b>
+        <div style="max-height:200px; overflow-y:auto; margin:8px 0; background:var(--bg-2); padding:8px; border-radius:6px;">
+          ${!archive.salesEntries || !archive.salesEntries.length ? '<p style="font-size:11px; color:var(--ink-soft);">Нет записей</p>' : 
+            archive.salesEntries.map(s => `
+              <div style="border-bottom:1px solid var(--line); padding:6px 0; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                <span><b>${s.date}</b> | Выручка: <b>${money(s.revenue)}</b> (${s.small}м / ${s.big}б) [${s.username}]</span>
+                <span>
+                  <button class="btn small gold" onclick="editArchivedSale('${archive.seasonName}', '${s.id}')">Изм</button>
+                  <button class="btn small red" onclick="deleteArchivedSale('${archive.seasonName}', '${s.id}')">Уд</button>
+                </span>
+              </div>
+            `).join('')}
+        </div>
+
+        <b>Закупки (${archive.purchaseEntries ? archive.purchaseEntries.length : 0}):</b>
+        <div style="max-height:150px; overflow-y:auto; margin:8px 0; background:var(--bg-2); padding:8px; border-radius:6px;">
+          ${!archive.purchaseEntries || !archive.purchaseEntries.length ? '<p style="font-size:11px; color:var(--ink-soft);">Нет записей</p>' : 
+            archive.purchaseEntries.map(p => `
+              <div style="border-bottom:1px solid var(--line); padding:6px 0; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                <span><b>${p.date}</b> | Потрачено: <b>${money(p.cost)}</b> (+${p.small}м / +${p.big}б) [${p.username}]</span>
+                <button class="btn small red" onclick="deleteArchivedPurchase('${archive.seasonName}', '${p.id}')">Уд</button>
+              </div>
+            `).join('')}
+        </div>
+
+        <button class="btn red small" onclick="deleteEntireArchivedSeason('${archive.seasonName}')">Удалить весь архив за ${archive.seasonName} г.</button>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function editArchivedSale(seasonName, saleId) {
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(!season) return;
+  const item = season.salesEntries.find(x => x.id === saleId);
+  if(!item) return;
+
+  const newRev = prompt('Архив: Изменить сумму выручки (₽):', item.revenue);
+  if(newRev === null) return;
+  const newSm = prompt('Архив: Изменить мал. магниты:', item.small);
+  const newBg = prompt('Архив: Изменить бол. магниты:', item.big);
+
+  item.revenue = parseFloat(newRev) || 0;
+  item.small = parseInt(newSm) || 0;
+  item.big = parseInt(newBg) || 0;
+
+  saveData();
+  toast('Прошлогодний отчет обновлен');
+  render();
+}
+
+function deleteArchivedSale(seasonName, saleId) {
+  if(!confirm('Удалить эту запись из архива прошлых лет?')) return;
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(season) {
+    season.salesEntries = season.salesEntries.filter(x => x.id !== saleId);
+    saveData();
+    render();
+  }
+}
+
+function deleteArchivedPurchase(seasonName, purchaseId) {
+  if(!confirm('Удалить эту закупку из архива прошлых лет?')) return;
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(season) {
+    season.purchaseEntries = season.purchaseEntries.filter(x => x.id !== purchaseId);
+    saveData();
+    render();
+  }
+}
+
+function deleteEntireArchivedSeason(seasonName) {
+  const masterInput = prompt(`Внимание! Введите Мастер-пароль для удаления ВСЕГО архива за ${seasonName} год:`);
+  if(masterInput !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  state.archivedSeasons = state.archivedSeasons.filter(s => s.seasonName !== seasonName);
+  saveData();
+  toast(`Архив за ${seasonName} удален`);
+  render();
+}
+
+/* ВЛАДЕЛЕЦ - УПРАВЛЕНИЕ СЕЗОНАМИ И СБРОС */
+function renderOwnerSeasonsControlTab() {
+  return `
+  <div class="panel" style="border-color:var(--brass);">
+    <h3>Завершение текущего сезона (${state.currentSeason})</h3>
+    <p style="font-size:12px; color:var(--ink-soft);">
+      Нажмите эту кнопку в конце года/сезона. Текущие отчеты о продажах и закупках сохранятся в <b>«Архив сезонов»</b>.
+      Кассы точек и остатки обнулятся, и вы сможете начать новый сезон с чистого листа.
+    </p>
+    <div class="field">
+      <label class="field-label">Название следующего сезона / года</label>
+      <input type="text" id="nextSeasonName" value="${parseInt(state.currentSeason)+1 || '2027'}">
+    </div>
+    <button class="btn gold" onclick="finishCurrentSeason()">Завершить сезон и перенести отчеты в Архив</button>
+  </div>
+
+  <div class="panel" style="border-color:var(--red); margin-top:24px;">
+    <h3 style="color:var(--red);">Сброс Данных (Требуется Мастер-пароль)</h3>
+    <p style="font-size:11px; color:var(--ink-soft); margin-bottom:16px;">По умолчанию Мастер-пароль: <b>12345</b> (можно сменить в Профиле)</p>
+
+    <div style="margin-bottom:16px; padding:12px; background:var(--bg-2); border-radius:var(--radius-sm);">
+      <h4 style="margin:0 0 6px 0;">1. Сбросить отчеты за ТЕКУЩИЙ ГОД (${state.currentSeason})</h4>
+      <p style="font-size:11px; color:var(--ink-soft);">Удалит все текущие продажи, закупки и обнулит кассы. Сотрудники и Прошлые Года в Архиве НЕ удалятся.</p>
+      <button class="btn red" onclick="resetCurrentYearData()">Сбросить данные текущего года</button>
+    </div>
+
+    <div style="padding:12px; background:var(--bg-2); border-radius:var(--radius-sm); border:1px solid var(--red);">
+      <h4 style="margin:0 0 6px 0; color:var(--red);">2. ПОЛНЫЙ СБРОС ВСЕГО (За всё время)</h4>
+      <p style="font-size:11px; color:var(--ink-soft);">Полностью стирает ВСЕ продажи, закупки, фото, архив сезонов, чат и сотрудников (останется только аккаунт Owner).</p>
+      <button class="btn red" onclick="resetEverythingData()">Сбросить ВСЁ за все время</button>
+    </div>
+  </div>`;
+}
+
+function finishCurrentSeason() {
+  const nextSeason = document.getElementById('nextSeasonName').value.trim();
+  if(!nextSeason) return toast('Введите название нового сезона', true);
+
+  if(!confirm(`Завершить текущий сезон (${state.currentSeason}) и начать Новый Сезон (${nextSeason})?`)) return;
+
+  state.archivedSeasons.unshift({
+    seasonName: state.currentSeason,
+    salesEntries: [...state.salesEntries],
+    purchaseEntries: [...state.purchaseEntries]
+  });
+
+  state.salesEntries = [];
+  state.purchaseEntries = [];
+  state.payoutRequests = [];
+  state.points.forEach(p => { p.revenue = 0; p.small = 0; p.big = 0; });
+  state.users.forEach(u => u.salaryBalance = 0);
+  state.currentSeason = nextSeason;
+
+  saveData();
+  toast(`Сезон ${nextSeason} успешно начат!`);
+  render();
+}
+
+function resetCurrentYearData() {
+  const pass = prompt(`ВНИМАНИЕ! Для сброса данных за ${state.currentSeason} год введите Мастер-пароль:`);
+  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  state.salesEntries = [];
+  state.purchaseEntries = [];
+  state.payoutRequests = [];
+  state.points.forEach(p => { p.revenue = 0; });
+  state.users.forEach(u => u.salaryBalance = 0);
+
+  saveData();
+  toast(`Отчеты за ${state.currentSeason} год сброшены`);
+  render();
+}
+
+function resetEverythingData() {
+  const pass = prompt('ОПАСНО! Это действие полностью очистит базу за все годы!\nВведите Мастер-пароль:');
+  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  const curPass = state.masterPassword;
+  state = defaultState();
+  state.masterPassword = curPass;
+
+  saveData();
+  toast('Выполнен полный сброс системы');
+  render();
+}
+
+/* ВЛАДЕЛЕЦ - БАЗА ФОТО */
+function renderOwnerPhotosTab() {
+  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
+
+  return `
+  <div class="panel">
+    <h3>Опубликовать фото для клиента</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerUploadPoint">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label class="field-label">Код заказа</label><input type="text" id="ownerUploadCode" placeholder="например 1024"></div>
+    <div class="field"><label class="field-label">Файлы фотографий</label><input type="file" id="ownerUploadFile" accept="image/*" multiple></div>
+    <button class="btn blue" onclick="uploadOwnerPhoto()">Загрузить и опубликовать</button>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0;">База загруженных фото (${state.digitalPhotos.length})</h3>
+      ${downloadedCount > 0 ? `<button class="btn small red" onclick="deleteDownloadedPhotos()">Удалить все скачанные (${downloadedCount})</button>` : ''}
+    </div>
+    ${!state.digitalPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Файлы отсутствуют</p>' :
+      state.digitalPhotos.map(p => {
+        const pt = state.points.find(x => x.id === p.pointId);
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+          <div>
+            <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
             <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
-              ${p.downloaded ? 'Скачано клиентом' : 'Не скачано'}
+              ${p.downloaded ? 'Скачано' : 'Ожидает'} | Загрузил: ${p.uploadedBy}
             </div>
           </div>
-          <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить с сайта</button>
-        </div>
-      `).join('')}
+          <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+        </div>`;
+      }).join('')}
   </div>`;
+}
+
+function uploadOwnerPhoto() {
+  const pointId = document.getElementById('ownerUploadPoint').value;
+  uploadDigitalPhoto(pointId, 'ownerUploadCode', 'ownerUploadFile');
+}
+
+function deleteDigitalPhoto(id) {
+  state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== id && p.id !== id);
+  saveData();
+  toast('Фото удалено');
+  render();
+}
+
+function deleteDownloadedPhotos() {
+  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
+  if (!downloadedCount) return toast('Нет скачанных фото для удаления', true);
+
+  if (confirm(`Удалить все скачанные фотографии (${downloadedCount} шт.) из базы?`)) {
+    state.digitalPhotos = state.digitalPhotos.filter(p => !p.downloaded);
+    saveData();
+    toast(`Удалено скачанных фото: ${downloadedCount}`);
+    render();
+  }
+}
+
+function deleteMyDownloadedPhotos() {
+  const user = currentUser();
+  if(!user) return;
+  
+  const myDownloaded = state.digitalPhotos.filter(p => p.uploadedBy === user.username && p.downloaded);
+  if (!myDownloaded.length) return toast('У вас нет скачанных фото для удаления', true);
+
+  if (confirm(`Удалить все ваши скачанные фотографии (${myDownloaded.length} шт.)?`)) {
+    state.digitalPhotos = state.digitalPhotos.filter(p => !(p.uploadedBy === user.username && p.downloaded));
+    saveData();
+    toast(`Удалено ваших скачанных фото: ${myDownloaded.length}`);
+    render();
+  }
 }
 
 function logout() {
   session.userId = null;
   session.currentTab = 'download_public';
+  session.userSubTab = 'main';
   render();
 }
 
-/* INITIALIZATION */
 (function init() {
   loadData();
   render();
