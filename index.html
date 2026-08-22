@@ -128,7 +128,20 @@ function defaultState() {
 }
 
 let state = defaultState();
-let session = { userId: null, currentTab: 'download_public', ownerSubTab: 'overview', userSubTab: 'main', activeChatTarget: 'all' };
+
+// Восстановление сессии из браузера
+const savedSession = JSON.parse(localStorage.getItem('app_session') || 'null');
+let session = savedSession || { 
+  userId: null, 
+  currentTab: 'download_public', 
+  ownerSubTab: 'overview', 
+  userSubTab: 'main', 
+  activeChatTarget: 'all' 
+};
+
+function saveSession() {
+  localStorage.setItem('app_session', JSON.stringify(session));
+}
 
 function toast(msg, isErr) {
   const t = document.getElementById('toast');
@@ -157,7 +170,14 @@ dbRef.on('value', (snapshot) => {
     state = defaultState();
     saveData();
   }
-  render();
+
+  // Не перезагружать страницу при изменении базы, если пользователь сейчас печатает
+  const activeElement = document.activeElement;
+  const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+
+  if (!isTyping) {
+    render();
+  }
 });
 
 function saveData() {
@@ -168,6 +188,24 @@ function saveData() {
 }
 
 function currentUser() { return state.users.find(u => u.id === session.userId) || null; }
+
+function switchOwnerSubTab(tabName) {
+  session.ownerSubTab = tabName;
+  saveSession();
+  render();
+}
+
+function switchUserSubTab(tabName) {
+  session.userSubTab = tabName;
+  saveSession();
+  render();
+}
+
+function switchCurrentTab(tabName) {
+  session.currentTab = tabName;
+  saveSession();
+  render();
+}
 
 function render() {
   const root = document.getElementById('root');
@@ -204,7 +242,7 @@ function renderPublicDownloadPage() {
       Обратная связь: <a href="tel:+79256860074" style="color:var(--brass); text-decoration:none; font-weight:600;">+7 925 686 00 74</a>
     </div>
     <div style="margin-top:20px; border-top:1px solid var(--line); padding-top:20px; width:100%;">
-      <button class="btn outline" onclick="session.currentTab='login'; render();">Вход для персонала</button>
+      <button class="btn outline" onclick="switchCurrentTab('login')">Вход для персонала</button>
     </div>
   </div>`;
 }
@@ -246,7 +284,7 @@ function renderAuthPage() {
       <div class="field"><label class="field-label">Пароль</label><input type="password" id="loginPass"></div>
       <button class="btn gold" onclick="handleLogin()">Войти</button>
     </div>
-    <button class="btn outline" onclick="session.currentTab='download_public'; render();">На страницу скачивания</button>
+    <button class="btn outline" onclick="switchCurrentTab('download_public')">На страницу скачивания</button>
   </div>`;
 }
 
@@ -259,6 +297,7 @@ function handleLogin() {
   session.userId = user.id;
   session.currentTab = 'main';
   session.userSubTab = 'main';
+  saveSession();
   render();
 }
 
@@ -279,7 +318,7 @@ function renderChatSection(user) {
     <h3>Сообщения и Чат</h3>
     <div class="field">
       <label class="field-label">Кому написать:</label>
-      <select onchange="session.activeChatTarget = this.value; render();">
+      <select onchange="session.activeChatTarget = this.value; saveSession(); render();">
         <option value="all" ${targetId === 'all' ? 'selected' : ''}>📢 Общий чат (для всех)</option>
         ${otherUsers.map(u => `
           <option value="${u.id}" ${targetId === u.id ? 'selected' : ''}>
@@ -419,10 +458,10 @@ function renderEmployeeDashboard(user) {
   <div class="topbar">
     <div><b>${point ? point.name : 'Продавец'}</b> <span class="role-chip">(${user.username})</span></div>
     <div>
-      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='chat'?'main':'chat'); render();">
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='chat'?'main':'chat')">
         ${session.userSubTab === 'chat' ? 'Главная' : '💬 Чат'}
       </button>
-      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='profile'?'main':'profile'); render();">
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='profile'?'main':'profile')">
         ${session.userSubTab === 'profile' ? 'Главная' : 'Профиль'}
       </button>
       <button class="btn small outline" onclick="logout()">Выйти</button>
@@ -459,7 +498,7 @@ function renderEmployeeMainView(user, allowedPoints, point) {
 
     ${allowedPoints.length > 1 ? `
     <div class="nav-tabs" style="padding:0 0 12px 0; background:transparent;">
-      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedEmployeePointId='${p.id}'; render();">${p.name}</button>`).join('')}
+      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedEmployeePointId='${p.id}'; saveSession(); render();">${p.name}</button>`).join('')}
     </div>
     ` : ''}
 
@@ -620,10 +659,10 @@ function renderBuyerDashboard(user) {
   <div class="topbar">
     <div><b>Закупочный кабинет</b> <span class="role-chip">(${user.username})</span></div>
     <div>
-      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='chat'?'main':'chat'); render();">
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='chat'?'main':'chat')">
         ${session.userSubTab === 'chat' ? 'Главная' : '💬 Чат'}
       </button>
-      <button class="btn small gold" onclick="session.userSubTab = (session.userSubTab==='profile'?'main':'profile'); render();">
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='profile'?'main':'profile')">
         ${session.userSubTab === 'profile' ? 'Главная' : 'Профиль'}
       </button>
       <button class="btn small outline" onclick="logout()">Выйти</button>
@@ -660,7 +699,7 @@ function renderBuyerMainView(user) {
     </div>
 
     <div class="nav-tabs" style="padding:0 0 10px 0; background:transparent;">
-      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedBuyerPointId='${p.id}'; render();">${p.name}</button>`).join('')}
+      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedBuyerPointId='${p.id}'; saveSession(); render();">${p.name}</button>`).join('')}
     </div>
 
     <div class="panel">
@@ -710,17 +749,17 @@ function renderOwnerDashboard(user) {
     <button class="btn small outline" onclick="logout()">Выйти</button>
   </div>
   <div class="nav-tabs">
-    <button class="tab-btn ${session.ownerSubTab==='overview'?'active':''}" onclick="session.ownerSubTab='overview';render();">Обзор</button>
-    <button class="tab-btn ${session.ownerSubTab==='chat'?'active':''}" onclick="session.ownerSubTab='chat';render();">💬 Чат</button>
-    <button class="tab-btn ${session.ownerSubTab==='owner_report'?'active':''}" onclick="session.ownerSubTab='owner_report';render();">Сдать Отчет</button>
-    <button class="tab-btn ${session.ownerSubTab==='purchases'?'active':''}" onclick="session.ownerSubTab='purchases';render();">Закупки</button>
-    <button class="tab-btn ${session.ownerSubTab==='points'?'active':''}" onclick="session.ownerSubTab='points';render();">Точки</button>
-    <button class="tab-btn ${session.ownerSubTab==='team'?'active':''}" onclick="session.ownerSubTab='team';render();">Команда и Балансы</button>
-    <button class="tab-btn ${session.ownerSubTab==='logs'?'active':''}" onclick="session.ownerSubTab='logs';render();">Отчеты года</button>
-    <button class="tab-btn ${session.ownerSubTab==='archive'?'active':''}" onclick="session.ownerSubTab='archive';render();">Архив сезонов</button>
-    <button class="tab-btn ${session.ownerSubTab==='photos'?'active':''}" onclick="session.ownerSubTab='photos';render();">База Фото</button>
-    <button class="tab-btn ${session.ownerSubTab==='seasons_control'?'active':''}" onclick="session.ownerSubTab='seasons_control';render();" style="border-color:var(--red); color:var(--red);">Смена/Сброс Года</button>
-    <button class="tab-btn ${session.ownerSubTab==='profile'?'active':''}" onclick="session.ownerSubTab='profile';render();">Профиль</button>
+    <button class="tab-btn ${session.ownerSubTab==='overview'?'active':''}" onclick="switchOwnerSubTab('overview')">Обзор</button>
+    <button class="tab-btn ${session.ownerSubTab==='chat'?'active':''}" onclick="switchOwnerSubTab('chat')">💬 Чат</button>
+    <button class="tab-btn ${session.ownerSubTab==='owner_report'?'active':''}" onclick="switchOwnerSubTab('owner_report')">Сдать Отчет</button>
+    <button class="tab-btn ${session.ownerSubTab==='purchases'?'active':''}" onclick="switchOwnerSubTab('purchases')">Закупки</button>
+    <button class="tab-btn ${session.ownerSubTab==='points'?'active':''}" onclick="switchOwnerSubTab('points')">Точки</button>
+    <button class="tab-btn ${session.ownerSubTab==='team'?'active':''}" onclick="switchOwnerSubTab('team')">Команда и Балансы</button>
+    <button class="tab-btn ${session.ownerSubTab==='logs'?'active':''}" onclick="switchOwnerSubTab('logs')">Отчеты года</button>
+    <button class="tab-btn ${session.ownerSubTab==='archive'?'active':''}" onclick="switchOwnerSubTab('archive')">Архив сезонов</button>
+    <button class="tab-btn ${session.ownerSubTab==='photos'?'active':''}" onclick="switchOwnerSubTab('photos')">База Фото</button>
+    <button class="tab-btn ${session.ownerSubTab==='seasons_control'?'active':''}" onclick="switchOwnerSubTab('seasons_control')" style="border-color:var(--red); color:var(--red);">Смена/Сброс Года</button>
+    <button class="tab-btn ${session.ownerSubTab==='profile'?'active':''}" onclick="switchOwnerSubTab('profile')">Профиль</button>
   </div>
   <div class="content fade-in">
     ${session.ownerSubTab === 'overview' ? renderOwnerOverviewTab() : ''}
@@ -1350,6 +1389,7 @@ function logout() {
   session.userId = null;
   session.currentTab = 'download_public';
   session.userSubTab = 'main';
+  saveSession();
   render();
 }
 </script>
