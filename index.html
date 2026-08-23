@@ -25,7 +25,7 @@
   .fade-in { animation: fadeIn .2s ease-out; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-  .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .topbar { display:flex; align-items:center; justify-space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .role-chip { font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:600; letter-spacing:0.05em; }
 
   .nav-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 20px; background:var(--bg-2); border-bottom:1px solid var(--line); }
@@ -158,6 +158,9 @@ let currentSearchResultHtml = '';
 let currentSearchedCode = '';
 let generatedClientText = '';
 
+// Буфер для сохранения состояния локальных полей ввода перед перерендером
+let formBuffer = {};
+
 const savedSession = JSON.parse(localStorage.getItem('app_session') || 'null');
 let session = savedSession || { 
   userId: null, 
@@ -195,10 +198,29 @@ function closeLightbox() {
   if (modal) modal.classList.remove('active');
 }
 
+// Запоминание значений полей ввода перед обновлением DOM
+function preserveFormInputs() {
+  const inputs = document.querySelectorAll('input, select, textarea');
+  inputs.forEach(el => {
+    if (el.id && el.type !== 'file') {
+      formBuffer[el.id] = el.value;
+    }
+  });
+}
+
+// Восстановление значений полей ввода после обновления DOM
+function restoreFormInputs() {
+  Object.keys(formBuffer).forEach(id => {
+    const el = document.getElementById(id);
+    if (el && formBuffer[id] !== undefined && formBuffer[id] !== '') {
+      el.value = formBuffer[id];
+    }
+  });
+}
+
 dbRef.on('value', (snapshot) => {
   const data = snapshot.val();
   
-  // Проверка глубоких изменений, чтобы не делать лишний перерендер
   if (data && JSON.stringify(state) === JSON.stringify(data)) {
     return;
   }
@@ -222,9 +244,23 @@ dbRef.on('value', (snapshot) => {
   }
 
   const activeElement = document.activeElement;
-  const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
+  const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
 
-  if (!isTyping) {
+  // Проверка, есть ли прикрепленные файлы
+  const custFile = document.getElementById('custMagnetFile');
+  const empFile = document.getElementById('uploadFile');
+  const ownerFile = document.getElementById('ownerUploadFile');
+  const hasFiles = (custFile && custFile.files.length > 0) || 
+                   (empFile && empFile.files.length > 0) || 
+                   (ownerFile && ownerFile.files.length > 0);
+
+  // Проверка заполнености клиентской формы
+  const custName = document.getElementById('custName');
+  const custPhone = document.getElementById('custPhone');
+  const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
+
+  // Если пользователь печатает, прикрепил файл или начал заполнять форму — отменяем перерендер, чтобы не сбросить прогресс
+  if (!isTyping && !hasFiles && !hasUnsavedClientData) {
     render();
   }
 });
@@ -295,18 +331,21 @@ function switchCurrentTab(tabName) {
 }
 
 function render() {
-  const scrollPos = window.scrollY; // Сохраняем текущую позицию скролла
+  preserveFormInputs(); // Сохраняем значения полей перед рендерингом
+  const scrollPos = window.scrollY;
   const root = document.getElementById('root');
   const user = currentUser();
 
   if (session.currentTab === 'download_public') {
     root.innerHTML = renderPublicDownloadPage();
+    restoreFormInputs(); // Восстанавливаем данные полей
     window.scrollTo(0, scrollPos);
     return;
   }
 
   if (!user) {
     root.innerHTML = renderAuthPage();
+    restoreFormInputs();
     window.scrollTo(0, scrollPos);
     return;
   }
@@ -315,7 +354,8 @@ function render() {
   else if (user.role === 'employee') root.innerHTML = renderEmployeeDashboard(user);
   else if (user.role === 'buyer') root.innerHTML = renderBuyerDashboard(user);
 
-  window.scrollTo(0, scrollPos); // Восстанавливаем позицию скролла
+  restoreFormInputs(); // Восстанавливаем данные полей
+  window.scrollTo(0, scrollPos);
 }
 
 /* PUBLIC DOWNLOAD & REQUEST PAGE */
@@ -336,18 +376,18 @@ function renderPublicDownloadPage() {
       <div class="panel" style="width:100%; text-align:left;">
         <div class="field">
           <label class="field-label">Точка, где вы покупали</label>
-          <select id="custPointId">
+          <select id="custPointId" onchange="formBuffer['custPointId']=this.value">
             <option value="">-- Выберите точку --</option>
             ${state.points.map(pt => `<option value="${pt.id}">${pt.name}</option>`).join('')}
           </select>
         </div>
         <div class="field">
           <label class="field-label">Ваше Имя</label>
-          <input type="text" id="custName" placeholder="Иван">
+          <input type="text" id="custName" placeholder="Иван" oninput="formBuffer['custName']=this.value">
         </div>
         <div class="field">
           <label class="field-label">Номер телефона</label>
-          <input type="text" id="custPhone" placeholder="+7 900 000 00 00">
+          <input type="text" id="custPhone" placeholder="+7 900 000 00 00" oninput="formBuffer['custPhone']=this.value">
         </div>
         <div class="field">
           <label class="field-label">Фотография магнита</label>
@@ -359,7 +399,7 @@ function renderPublicDownloadPage() {
       <h2>Скачать Фотографии</h2>
       <p style="color:var(--ink-soft); font-size:13px;">Введите код заказа для получения фотографий</p>
       <div style="width:100%; margin:16px 0;">
-        <input type="text" id="photoCodeInput" value="${currentSearchedCode}" placeholder="Код заказа (например 1024)" style="text-align:center; font-size:18px;">
+        <input type="text" id="photoCodeInput" value="${currentSearchedCode}" placeholder="Код заказа (например 1024)" style="text-align:center; font-size:18px;" oninput="formBuffer['photoCodeInput']=this.value">
         <button class="btn gold" onclick="searchPhotoByCode()">Найти фото</button>
       </div>
       <div id="photoSearchResult" style="width:100%;">${currentSearchResultHtml}</div>
@@ -407,6 +447,12 @@ async function submitCustomerRequest() {
         date: nowFormatted(),
         status: 'pending'
       });
+      
+      // Очищаем локальный буфер после успешной отправки заявки
+      delete formBuffer['custName'];
+      delete formBuffer['custPhone'];
+      delete formBuffer['custPointId'];
+
       saveData();
       alert('Заявка успешно отправлена! Продавец этой точки уже обрабатывает её.');
       session.publicMode = 'download';
@@ -500,7 +546,7 @@ function renderAuthPage() {
   <div class="public-wrap fade-in">
     <h2>Авторизация</h2>
     <div class="panel" style="width:100%;">
-      <div class="field"><label class="field-label">Логин</label><input type="text" id="loginUser"></div>
+      <div class="field"><label class="field-label">Логин</label><input type="text" id="loginUser" oninput="formBuffer['loginUser']=this.value"></div>
       <div class="field"><label class="field-label">Пароль</label><input type="password" id="loginPass"></div>
       <button class="btn gold" onclick="handleLogin()">Войти</button>
     </div>
@@ -586,7 +632,7 @@ function renderChatSection(user) {
         </div>
 
         <div style="display:flex; gap:8px; padding:10px; background:var(--surface); border-top:1px solid var(--line);">
-          <textarea id="chatInputText" rows="2" placeholder="Напишите сообщение..." style="resize:none;"></textarea>
+          <textarea id="chatInputText" rows="2" placeholder="Напишите сообщение..." style="resize:none;" oninput="formBuffer['chatInputText']=this.value"></textarea>
           <button class="btn gold" style="width:100px; margin:0;" onclick="sendChatMessage()">Отправить</button>
         </div>
       </div>
@@ -612,6 +658,7 @@ function sendChatMessage() {
     readBy: [user.id]
   });
 
+  delete formBuffer['chatInputText'];
   saveData();
   if (textInput) textInput.value = '';
 }
@@ -736,7 +783,7 @@ function renderEmployeeMainView(user, allowedPoints, point) {
       <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
         <div class="field" style="margin-bottom:6px;">
           <label class="field-label">Запросить выплату (укажите сумму):</label>
-          <input type="number" id="empPayoutAmount" value="${user.salaryBalance || 0}">
+          <input type="number" id="empPayoutAmount" value="${user.salaryBalance || 0}" oninput="formBuffer['empPayoutAmount']=this.value">
         </div>
         <button class="btn small gold" onclick="requestCustomBalancePayout('${user.id}')">Запросить выплату</button>
       </div>
@@ -766,11 +813,11 @@ function renderEmployeeMainView(user, allowedPoints, point) {
 
     <div class="panel">
       <h3>Отчет за день: ${point.name}</h3>
-      <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="empDate" value="${todayStr()}"></div>
-      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev"></div>
+      <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="empDate" value="${todayStr()}" oninput="formBuffer['empDate']=this.value"></div>
+      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev" oninput="formBuffer['empRev']=this.value"></div>
       <div style="display:flex; gap:10px;">
-        <div class="field" style="flex:1;"><label class="field-label">Продано мал.</label><input type="number" id="empSm" value="0"></div>
-        <div class="field" style="flex:1;"><label class="field-label">Продано бол.</label><input type="number" id="empBg" value="0"></div>
+        <div class="field" style="flex:1;"><label class="field-label">Продано мал.</label><input type="number" id="empSm" value="0" oninput="formBuffer['empSm']=this.value"></div>
+        <div class="field" style="flex:1;"><label class="field-label">Продано бол.</label><input type="number" id="empBg" value="0" oninput="formBuffer['empBg']=this.value"></div>
       </div>
       <button class="btn green" onclick="submitEmployeeReport('${point.id}')">Отправить отчет</button>
     </div>
@@ -780,7 +827,7 @@ function renderEmployeeMainView(user, allowedPoints, point) {
       <div class="field">
         <label class="field-label">Код заказа</label>
         <div style="display:flex; gap:8px;">
-          <input type="text" id="uploadCode" placeholder="например 1024">
+          <input type="text" id="uploadCode" placeholder="например 1024" oninput="formBuffer['uploadCode']=this.value">
           <button class="btn small gold" style="width:130px; margin:0;" onclick="generateRandomCode('uploadCode')">🎲 Рандомный номер</button>
         </div>
       </div>
@@ -836,13 +883,22 @@ function fillUploadCodeFromRequest(requestId) {
     setTimeout(() => {
       const input = document.getElementById('ownerUploadCode');
       const pointSelect = document.getElementById('ownerUploadPoint');
-      if(input) input.value = randomCode;
-      if(pointSelect && req.pointId) pointSelect.value = req.pointId;
+      if(input) {
+        input.value = randomCode;
+        formBuffer['ownerUploadCode'] = randomCode;
+      }
+      if(pointSelect && req.pointId) {
+        pointSelect.value = req.pointId;
+        formBuffer['ownerUploadPoint'] = req.pointId;
+      }
       if(input) input.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 50);
   } else {
     const input = document.getElementById('uploadCode');
-    if(input) input.value = randomCode;
+    if(input) {
+      input.value = randomCode;
+      formBuffer['uploadCode'] = randomCode;
+    }
   }
 
   toast(`Присвоен номер ${randomCode}. Загрузите фотографии.`);
@@ -851,7 +907,10 @@ function fillUploadCodeFromRequest(requestId) {
 function generateRandomCode(inputId) {
   const code = Math.floor(1000 + Math.random() * 9000).toString();
   const el = document.getElementById(inputId);
-  if(el) el.value = code;
+  if(el) {
+    el.value = code;
+    formBuffer[inputId] = code;
+  }
 }
 
 function copyClientText() {
@@ -878,6 +937,11 @@ function submitEmployeeReport(pointId) {
   user.salaryBalance = (user.salaryBalance || 0) + earned;
 
   state.salesEntries.unshift({ id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: user.id, username: user.username, season: state.currentSeason });
+  
+  delete formBuffer['empRev'];
+  delete formBuffer['empSm'];
+  delete formBuffer['empBg'];
+
   saveData();
 
   if(confirm(`Отчет принят за ${reportDate}. Начислено: ${earned} ₽. Запросить выплату прямо сейчас?`)) {
@@ -974,6 +1038,7 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
       generatedClientText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${code}`;
     }
 
+    delete formBuffer[codeInputId];
     saveData();
     toast(`Успешно загружено фото: ${loadedCount}`);
   }
@@ -1020,7 +1085,7 @@ function renderBuyerMainView(user) {
       <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
         <div class="field" style="margin-bottom:6px;">
           <label class="field-label">Запросить выплату (укажите сумму):</label>
-          <input type="number" id="buyerPayoutAmount" value="${user.salaryBalance || 0}">
+          <input type="number" id="buyerPayoutAmount" value="${user.salaryBalance || 0}" oninput="formBuffer['buyerPayoutAmount']=this.value">
         </div>
         <button class="btn small gold" onclick="requestCustomBalancePayoutBuyer('${user.id}')">Запросить вывод баланса</button>
       </div>
@@ -1033,10 +1098,10 @@ function renderBuyerMainView(user) {
     <div class="panel">
       <h3>Оформить закупку на точку: ${point.name}</h3>
       <div style="display:flex; gap:10px;">
-        <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="buySm" value="0"></div>
-        <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="buyBg" value="0"></div>
+        <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="buySm" value="0" oninput="formBuffer['buySm']=this.value"></div>
+        <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="buyBg" value="0" oninput="formBuffer['buyBg']=this.value"></div>
       </div>
-      <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="buyCost" value="0"></div>
+      <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="buyCost" value="0" oninput="formBuffer['buyCost']=this.value"></div>
       <button class="btn blue" onclick="submitPurchase('${point.id}')">Внести закупку</button>
     </div>`;
 }
@@ -1065,6 +1130,11 @@ function submitPurchase(pointId) {
   point.revenue -= cost;
 
   state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: currentUser().username, season: state.currentSeason });
+  
+  delete formBuffer['buySm'];
+  delete formBuffer['buyBg'];
+  delete formBuffer['buyCost'];
+
   saveData();
   toast('Закупка проведена');
 }
@@ -1145,15 +1215,15 @@ function renderOwnerReportTab() {
     <h3>Внести отчет за день (как Владелец)</h3>
     <div class="field">
       <label class="field-label">Выберите точку</label>
-      <select id="ownerReportPoint">
+      <select id="ownerReportPoint" onchange="formBuffer['ownerReportPoint']=this.value">
         ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
       </select>
     </div>
-    <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="ownerReportDate" value="${todayStr()}"></div>
-    <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="ownerReportRev" placeholder="0"></div>
+    <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="ownerReportDate" value="${todayStr()}" oninput="formBuffer['ownerReportDate']=this.value"></div>
+    <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="ownerReportRev" placeholder="0" oninput="formBuffer['ownerReportRev']=this.value"></div>
     <div style="display:flex; gap:10px;">
-      <div class="field" style="flex:1;"><label class="field-label">Продано мал. (шт)</label><input type="number" id="ownerReportSm" value="0"></div>
-      <div class="field" style="flex:1;"><label class="field-label">Продано бол. (шт)</label><input type="number" id="ownerReportBg" value="0"></div>
+      <div class="field" style="flex:1;"><label class="field-label">Продано мал. (шт)</label><input type="number" id="ownerReportSm" value="0" oninput="formBuffer['ownerReportSm']=this.value"></div>
+      <div class="field" style="flex:1;"><label class="field-label">Продано бол. (шт)</label><input type="number" id="ownerReportBg" value="0" oninput="formBuffer['ownerReportBg']=this.value"></div>
     </div>
     <button class="btn green" onclick="submitOwnerReport()">Провести отчет без зарплаты</button>
   </div>`;
@@ -1176,6 +1246,11 @@ function submitOwnerReport() {
   state.salesEntries.unshift({
     id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: currentUser().id, username: 'Владелец (Owner)', season: state.currentSeason
   });
+
+  delete formBuffer['ownerReportRev'];
+  delete formBuffer['ownerReportSm'];
+  delete formBuffer['ownerReportBg'];
+
   saveData();
   toast('Отчет зафиксирован');
 }
@@ -1186,15 +1261,15 @@ function renderOwnerPurchasesTab() {
     <h3>Проведение закупки (как Владелец)</h3>
     <div class="field">
       <label class="field-label">Выберите точку</label>
-      <select id="ownerBuyPoint">
+      <select id="ownerBuyPoint" onchange="formBuffer['ownerBuyPoint']=this.value">
         ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
       </select>
     </div>
     <div style="display:flex; gap:10px;">
-      <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="ownerBuySm" value="0"></div>
-      <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="ownerBuyBg" value="0"></div>
+      <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="ownerBuySm" value="0" oninput="formBuffer['ownerBuySm']=this.value"></div>
+      <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="ownerBuyBg" value="0" oninput="formBuffer['ownerBuyBg']=this.value"></div>
     </div>
-    <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="ownerBuyCost" value="0"></div>
+    <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="ownerBuyCost" value="0" oninput="formBuffer['ownerBuyCost']=this.value"></div>
     <button class="btn blue" onclick="submitOwnerPurchase()">Внести закупку</button>
   </div>`;
 }
@@ -1211,6 +1286,11 @@ function submitOwnerPurchase() {
   point.revenue -= cost;
 
   state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: 'Владелец', season: state.currentSeason });
+  
+  delete formBuffer['ownerBuySm'];
+  delete formBuffer['ownerBuyBg'];
+  delete formBuffer['ownerBuyCost'];
+
   saveData();
   toast('Закупка проведена');
 }
@@ -1572,7 +1652,7 @@ function renderOwnerSeasonsControlTab() {
     </p>
     <div class="field">
       <label class="field-label">Название следующего сезона / года</label>
-      <input type="text" id="nextSeasonName" value="${parseInt(state.currentSeason)+1 || '2027'}">
+      <input type="text" id="nextSeasonName" value="${parseInt(state.currentSeason)+1 || '2027'}" oninput="formBuffer['nextSeasonName']=this.value">
     </div>
     <button class="btn gold" onclick="finishCurrentSeason()">Завершить сезон и перенести отчеты в Архив</button>
   </div>
@@ -1690,11 +1770,11 @@ function renderOwnerPhotosTab() {
     <h3>Опубликовать фото для клиента</h3>
     <div class="field">
       <label class="field-label">Выберите точку</label>
-      <select id="ownerUploadPoint">
+      <select id="ownerUploadPoint" onchange="formBuffer['ownerUploadPoint']=this.value">
         ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
       </select>
     </div>
-    <div class="field"><label class="field-label">Код заказа</label><input type="text" id="ownerUploadCode" placeholder="например 1024"></div>
+    <div class="field"><label class="field-label">Код заказа</label><input type="text" id="ownerUploadCode" placeholder="например 1024" oninput="formBuffer['ownerUploadCode']=this.value"></div>
     <div class="field"><label class="field-label">Файлы фотографий</label><input type="file" id="ownerUploadFile" accept="image/*" multiple></div>
     <button class="btn blue" onclick="uploadOwnerPhoto()">Загрузить и опубликовать</button>
     ${generatedClientText ? `
