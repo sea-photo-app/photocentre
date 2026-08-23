@@ -157,7 +157,6 @@ let state = defaultState();
 let currentSearchResultHtml = ''; 
 let currentSearchedCode = '';
 let generatedClientText = '';
-let expandedOrderTexts = {}; 
 
 const savedSession = JSON.parse(localStorage.getItem('app_session') || 'null');
 let session = savedSession || { 
@@ -198,6 +197,12 @@ function closeLightbox() {
 
 dbRef.on('value', (snapshot) => {
   const data = snapshot.val();
+  
+  // Проверка глубоких изменений, чтобы не делать лишний перерендер
+  if (data && JSON.stringify(state) === JSON.stringify(data)) {
+    return;
+  }
+
   if (data) {
     state = data;
     if (!state.masterPassword) state.masterPassword = '12345';
@@ -289,110 +294,28 @@ function switchCurrentTab(tabName) {
   render();
 }
 
-function toggleOrderTextVisibility(code) {
-  expandedOrderTexts[code] = !expandedOrderTexts[code];
-  render();
-}
-
-function copyDirectText(elementId) {
-  const el = document.getElementById(elementId);
-  if (el) {
-    navigator.clipboard.writeText(el.innerText);
-    toast('Текст скопирован!');
-  }
-}
-
-function getGroupedOrders(photosList) {
-  const groups = {};
-  photosList.forEach(p => {
-    if (!groups[p.code]) {
-      groups[p.code] = {
-        code: p.code,
-        pointId: p.pointId,
-        uploadedBy: p.uploadedBy,
-        downloaded: p.downloaded,
-        photos: []
-      };
-    }
-    groups[p.code].photos.push(p);
-    if (p.downloaded) groups[p.code].downloaded = true;
-  });
-  return Object.values(groups);
-}
-
-function renderGroupedOrdersList(groupedOrders, isOwnerView = false) {
-  if (!groupedOrders.length) {
-    return '<p style="font-size:12px; color:var(--ink-soft);">Файлы отсутствуют</p>';
-  }
-
-  const siteUrl = window.location.href.split('?')[0];
-
-  return groupedOrders.map(group => {
-    const pt = state.points.find(x => x.id === group.pointId);
-    const isExpanded = !!expandedOrderTexts[group.code];
-    
-    const matchedReq = state.customerRequests ? state.customerRequests.find(r => r.currentAssignedCode === group.code) : null;
-    const clientPhone = matchedReq ? matchedReq.phone : null;
-    const clientName = matchedReq ? matchedReq.name : null;
-
-    const messageText = clientName ? 
-      `Здравствуйте, ${clientName}! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${group.code}\nДля скачивания перейдите на сайт:\n${siteUrl}\nВыберите «Скачать фото» и введите ваш код заказа: ${group.code}` :
-      `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${group.code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${group.code}`;
-
-    const textElemId = `text_order_${group.code}`;
-
-    return `
-    <div style="border-bottom:1px solid var(--line); padding:10px 0;">
-      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <div>
-          <b>Код: ${group.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
-          <div style="font-size:11px; color:${group.downloaded ? 'var(--green)' : 'var(--brass)'};">
-            ${group.downloaded ? 'Скачано' : 'Ожидает'} ${isOwnerView ? `| Загрузил: ${group.uploadedBy}` : ''} | Фото: ${group.photos.length} шт.
-          </div>
-        </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn small gold" onclick="toggleOrderTextVisibility('${group.code}')">
-            ${isExpanded ? 'Скрыть текст' : 'Показать текст для отправки'}
-          </button>
-          <button class="btn small red" onclick="deleteDigitalPhoto('${group.code}')">Удалить</button>
-        </div>
-      </div>
-
-      ${isExpanded ? `
-        <div class="copy-box fade-in" style="margin-top:8px;">
-          ${clientPhone ? `
-            <div style="font-size:12px; margin-bottom:6px; color:var(--ink);">
-              <b>📱 Номер телефона клиента:</b> <a href="tel:${clientPhone}" style="color:var(--brass); text-decoration:none; font-weight:600;">${clientPhone}</a> ${clientName ? `(${clientName})` : ''}
-            </div>
-          ` : `
-            <div style="font-size:11px; color:var(--ink-soft); margin-bottom:6px;">Телефон клиента не указан</div>
-          `}
-          <div style="font-size:11px; color:var(--brass); margin-bottom:4px; font-weight:600;">Текст для отправки:</div>
-          <div id="${textElemId}" style="font-size:13px; white-space:pre-wrap; background:var(--surface); padding:8px; border-radius:4px; border:1px solid var(--line);">${messageText}</div>
-          <button class="btn small gold" style="margin-top:8px;" onclick="copyDirectText('${textElemId}')">Скопировать текст</button>
-        </div>
-      ` : ''}
-    </div>`;
-  }).join('');
-}
-
 function render() {
+  const scrollPos = window.scrollY; // Сохраняем текущую позицию скролла
   const root = document.getElementById('root');
   const user = currentUser();
 
   if (session.currentTab === 'download_public') {
     root.innerHTML = renderPublicDownloadPage();
+    window.scrollTo(0, scrollPos);
     return;
   }
 
   if (!user) {
     root.innerHTML = renderAuthPage();
+    window.scrollTo(0, scrollPos);
     return;
   }
 
   if (user.role === 'owner') root.innerHTML = renderOwnerDashboard(user);
   else if (user.role === 'employee') root.innerHTML = renderEmployeeDashboard(user);
   else if (user.role === 'buyer') root.innerHTML = renderBuyerDashboard(user);
+
+  window.scrollTo(0, scrollPos); // Восстанавливаем позицию скролла
 }
 
 /* PUBLIC DOWNLOAD & REQUEST PAGE */
@@ -523,22 +446,52 @@ function searchPhotoByCode() {
     return;
   }
 
-  photos.forEach(p => p.downloaded = true);
-
   currentSearchResultHtml = `
     <div style="margin-top:16px; width:100%;">
       <p style="font-size:13px; color:var(--green); font-weight:600; margin-bottom:12px;">Найдено снимков: ${photos.length}</p>
       ${photos.map((p, idx) => `
         <div class="panel fade-in" style="margin-bottom:12px; text-align:left;">
           <img src="${p.photoUrl}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:10px; cursor:pointer;" onclick="openLightbox('${p.photoUrl}')">
-          <a href="${p.photoUrl}" download="Photo_${p.code}_${idx+1}.jpg" target="_blank" class="btn green" style="display:block; text-align:center; text-decoration:none;">Скачать фото №${idx+1}</a>
+          <button class="btn green" onclick="downloadPhotoFile('${p.id}', '${p.photoUrl}', 'Photo_${p.code}_${idx+1}.jpg')">Скачать фото №${idx+1}</button>
         </div>
       `).join('')}
     </div>
   `;
 
   if (res) res.innerHTML = currentSearchResultHtml;
-  saveData();
+}
+
+async function downloadPhotoFile(photoId, photoUrl, fileName) {
+  toast('Скачивание файла...');
+  
+  const photo = state.digitalPhotos.find(p => p.id === photoId);
+  if (photo) {
+    photo.downloaded = true;
+    saveData();
+  }
+
+  try {
+    const response = await fetch(photoUrl);
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    toast('Файл сохранен!');
+  } catch (err) {
+    console.error(err);
+    const link = document.createElement('a');
+    link.href = photoUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    link.click();
+  }
 }
 
 /* AUTHENTICATION */
@@ -775,8 +728,6 @@ function renderEmployeeMainView(user, allowedPoints, point) {
     ? state.customerRequests.filter(r => r.status === 'pending' && r.pointId === point.id) 
     : [];
 
-  const groupedMyOrders = getGroupedOrders(myPhotos);
-
   return `
     <div class="panel" style="border-color:var(--brass);">
       <div class="stat-label">Баланс Зарплаты (${state.currentSeason} г.)</div>
@@ -850,7 +801,20 @@ function renderEmployeeMainView(user, allowedPoints, point) {
         <h3 style="margin:0;">Загруженные вами фото (${myPhotos.length})</h3>
         ${myDownloadedCount > 0 ? `<button class="btn small red" onclick="deleteMyDownloadedPhotos()">Удалить скачанные (${myDownloadedCount})</button>` : ''}
       </div>
-      ${renderGroupedOrdersList(groupedMyOrders, false)}
+      ${!myPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Вы пока не загружали фото</p>' :
+        myPhotos.map(p => {
+          const pt = state.points.find(x => x.id === p.pointId);
+          return `
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+            <div>
+              <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+              <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
+                ${p.downloaded ? 'Скачано' : 'Ожидает'}
+              </div>
+            </div>
+            <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+          </div>`;
+        }).join('')}
     </div>`;
 }
 
@@ -1113,18 +1077,15 @@ function renderOwnerDashboard(user) {
   return `
   <div class="topbar">
     <div><b>Панель Владельца</b> <span class="role-chip">(${state.currentSeason} Сезон)</span></div>
-    <div>
-      <button class="btn small gold" onclick="switchOwnerSubTab(session.ownerSubTab==='chat'?'overview':'chat')">
-        ${session.ownerSubTab === 'chat' ? 'Главная' : '💬 Чат'}
-        ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ''}
-      </button>
-      <button class="btn small outline" onclick="logout()">Выйти</button>
-    </div>
+    <button class="btn small outline" onclick="logout()">Выйти</button>
   </div>
   <div class="nav-tabs">
     <button class="tab-btn ${session.ownerSubTab==='overview'?'active':''}" onclick="switchOwnerSubTab('overview')">Обзор</button>
     <button class="tab-btn ${session.ownerSubTab==='photos'?'active':''}" onclick="switchOwnerSubTab('photos')">
       База Фото ${pendingCustomerRequestsCount > 0 ? `<span class="badge">${pendingCustomerRequestsCount}</span>` : ''}
+    </button>
+    <button class="tab-btn ${session.ownerSubTab==='chat'?'active':''}" onclick="switchOwnerSubTab('chat')">
+      💬 Чат ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ''}
     </button>
     <button class="tab-btn ${session.ownerSubTab==='owner_report'?'active':''}" onclick="switchOwnerSubTab('owner_report')">Сдать Отчет</button>
     <button class="tab-btn ${session.ownerSubTab==='purchases'?'active':''}" onclick="switchOwnerSubTab('purchases')">Закупки</button>
@@ -1694,8 +1655,6 @@ function renderOwnerPhotosTab() {
     return r.pointId === currentFilter;
   });
 
-  const groupedOrders = getGroupedOrders(state.digitalPhotos);
-
   return `
   <div class="panel">
     <h3>Заявки Клиентов (${pendingRequests.length})</h3>
@@ -1752,7 +1711,20 @@ function renderOwnerPhotosTab() {
       <h3 style="margin:0;">База загруженных фото (${state.digitalPhotos.length})</h3>
       ${downloadedCount > 0 ? `<button class="btn small red" onclick="deleteDownloadedPhotos()">Удалить все скачанные (${downloadedCount})</button>` : ''}
     </div>
-    ${renderGroupedOrdersList(groupedOrders, true)}
+    ${!state.digitalPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Файлы отсутствуют</p>' :
+      state.digitalPhotos.map(p => {
+        const pt = state.points.find(x => x.id === p.pointId);
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+          <div>
+            <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+            <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
+              ${p.downloaded ? 'Скачано' : 'Ожидает'} | Загрузил: ${p.uploadedBy}
+            </div>
+          </div>
+          <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+        </div>`;
+      }).join('')}
   </div>`;
 }
 
@@ -1761,10 +1733,10 @@ function uploadOwnerPhoto() {
   uploadDigitalPhoto(pointId, 'ownerUploadCode', 'ownerUploadFile');
 }
 
-function deleteDigitalPhoto(codeOrId) {
-  state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== codeOrId && p.id !== codeOrId);
+function deleteDigitalPhoto(id) {
+  state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== id && p.id !== id);
   saveData();
-  toast('Заказ / Фото удалено');
+  toast('Фото удалено');
 }
 
 function deleteDownloadedPhotos() {
