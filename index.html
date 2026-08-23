@@ -25,7 +25,7 @@
   .fade-in { animation: fadeIn .2s ease-out; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-  .topbar { display:flex; align-items:center; justify-space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .role-chip { font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:600; letter-spacing:0.05em; }
 
   .nav-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 20px; background:var(--bg-2); border-bottom:1px solid var(--line); }
@@ -75,7 +75,6 @@
   .chat-msg-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; gap: 8px; }
   .chat-msg-body { word-break: break-word; white-space: pre-wrap; margin-bottom: 6px; }
 
-  /* Notification Badge on buttons */
   .badge { position: absolute; top: -4px; right: -4px; background: var(--red); color: #fff; font-size: 10px; font-weight: bold; border-radius: 10px; padding: 2px 5px; line-height: 1; min-width: 16px; text-align: center; }
 
   /* Fullscreen Image Lightbox */
@@ -157,8 +156,9 @@ let state = defaultState();
 let currentSearchResultHtml = ''; 
 let currentSearchedCode = '';
 let generatedClientText = '';
+let isUploading = false; // Флаг процесса загрузки фото
+let expandedGroupCodes = {}; // Развернутые группы кодов заказов
 
-// Буфер для сохранения состояния локальных полей ввода перед перерендером
 let formBuffer = {};
 
 const savedSession = JSON.parse(localStorage.getItem('app_session') || 'null');
@@ -198,7 +198,6 @@ function closeLightbox() {
   if (modal) modal.classList.remove('active');
 }
 
-// Запоминание значений полей ввода перед обновлением DOM
 function preserveFormInputs() {
   const inputs = document.querySelectorAll('input, select, textarea');
   inputs.forEach(el => {
@@ -208,7 +207,6 @@ function preserveFormInputs() {
   });
 }
 
-// Восстановление значений полей ввода после обновления DOM
 function restoreFormInputs() {
   Object.keys(formBuffer).forEach(id => {
     const el = document.getElementById(id);
@@ -225,7 +223,6 @@ dbRef.on('value', (snapshot) => {
     return;
   }
 
-  // Проверка, изменились ли сообщения в чате
   const chatChanged = data && JSON.stringify(state.chatMessages) !== JSON.stringify(data.chatMessages);
 
   if (data) {
@@ -246,10 +243,11 @@ dbRef.on('value', (snapshot) => {
     saveData();
   }
 
+  if (isUploading) return; // Не перерисовываем интерфейс во время процесса загрузки фото
+
   const activeElement = document.activeElement;
   const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
 
-  // Проверка, есть ли прикрепленные файлы
   const custFile = document.getElementById('custMagnetFile');
   const empFile = document.getElementById('uploadFile');
   const ownerFile = document.getElementById('ownerUploadFile');
@@ -257,12 +255,10 @@ dbRef.on('value', (snapshot) => {
                    (empFile && empFile.files.length > 0) || 
                    (ownerFile && ownerFile.files.length > 0);
 
-  // Проверка заполнености клиентской формы
   const custName = document.getElementById('custName');
   const custPhone = document.getElementById('custPhone');
   const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
 
-  // Разрешаем обновление, если пришли сообщения в чат или если пользователь не пишет в текущий момент
   if (chatChanged || (!isTyping && !hasFiles && !hasUnsavedClientData)) {
     render();
   }
@@ -333,15 +329,20 @@ function switchCurrentTab(tabName) {
   render();
 }
 
+function toggleGroupExpand(code) {
+  expandedGroupCodes[code] = !expandedGroupCodes[code];
+  render();
+}
+
 function render() {
-  preserveFormInputs(); // Сохраняем значения полей перед рендерингом
+  preserveFormInputs();
   const scrollPos = window.scrollY;
   const root = document.getElementById('root');
   const user = currentUser();
 
   if (session.currentTab === 'download_public') {
     root.innerHTML = renderPublicDownloadPage();
-    restoreFormInputs(); // Восстанавливаем данные полей
+    restoreFormInputs();
     window.scrollTo(0, scrollPos);
     return;
   }
@@ -357,7 +358,7 @@ function render() {
   else if (user.role === 'employee') root.innerHTML = renderEmployeeDashboard(user);
   else if (user.role === 'buyer') root.innerHTML = renderBuyerDashboard(user);
 
-  restoreFormInputs(); // Восстанавливаем данные полей
+  restoreFormInputs();
   window.scrollTo(0, scrollPos);
 }
 
@@ -454,7 +455,6 @@ async function submitCustomerRequest() {
         status: 'pending'
       });
       
-      // Очищаем локальный буфер и элементы ввода после успешной отправки заявки
       delete formBuffer['custName'];
       delete formBuffer['custPhone'];
       delete formBuffer['custPointId'];
@@ -773,13 +773,121 @@ function renderEmployeeDashboard(user) {
   </div>`;
 }
 
+function groupPhotosByCode(photos) {
+  const groups = {};
+  photos.forEach(p => {
+    if (!groups[p.code]) {
+      groups[p.code] = {
+        code: p.code,
+        phone: p.phone || '',
+        pointId: p.pointId,
+        uploadedBy: p.uploadedBy,
+        items: []
+      };
+    }
+    groups[p.code].items.push(p);
+  });
+  return Object.values(groups);
+}
+
+function renderGroupedPhotoList(groupedPhotos, isOwnerView = false) {
+  if (!groupedPhotos.length) return '<p style="font-size:12px; color:var(--ink-soft);">Список загруженных фото пуст</p>';
+
+  const siteUrl = window.location.href.split('?')[0];
+
+  return groupedPhotos.map(group => {
+    const isExpanded = !!expandedGroupCodes[group.code];
+    const downloadedCount = group.items.filter(i => i.downloaded).length;
+    const isAllDownloaded = downloadedCount === group.items.length && group.items.length > 0;
+    const pt = state.points.find(x => x.id === group.pointId);
+
+    const clientMsgText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${group.code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${group.code}`;
+
+    return `
+      <div style="background:var(--bg-2); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <b>Код заказа: <span style="color:var(--brass); font-size:16px;">${group.code}</span></b> 
+            <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+            <div style="font-size:12px; margin-top:4px;">
+              Загружено фото: <b>${group.items.length}</b> | Скачано: <b style="color:${isAllDownloaded ? 'var(--green)' : 'var(--brass)'}">${downloadedCount} из ${group.items.length}</b>
+              ${isOwnerView ? ` | Автор: ${group.uploadedBy}` : ''}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn small outline" onclick="toggleGroupExpand('${group.code}')">
+              ${isExpanded ? '▲ Свернуть' : '▼ Развернуть фото'}
+            </button>
+            <button class="btn small red" ${!isAllDownloaded ? 'disabled style="opacity:0.5; cursor:not-allowed;" title="Удалить можно только после того, как все фото будут скачаны"' : ''} onclick="deletePhotoGroup('${group.code}')">
+              Удалить заказ
+            </button>
+          </div>
+        </div>
+
+        <div style="margin-top:10px; border-top:1px solid var(--line); padding-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn small gold" style="margin:0;" onclick="toggleClientTextVisibility('textGroup_${group.code}')">📱 Показать текст для отправки</button>
+          ${group.phone ? `<span style="font-size:12px; color:var(--brass);"><b>Тел:</b> ${group.phone}</span>` : ''}
+        </div>
+
+        <div id="textGroup_${group.code}" class="copy-box" style="display:none; margin-top:8px;">
+          <div style="font-size:11px; color:var(--brass); margin-bottom:4px; font-weight:600;">Текст для клиента:</div>
+          <div id="textToCopy_${group.code}" style="font-size:13px; white-space:pre-wrap;">${clientMsgText}</div>
+          ${group.phone ? `<div style="font-size:12px; color:var(--green); margin-top:6px;"><b>Номер телефона для отправки:</b> ${group.phone}</div>` : ''}
+          <button class="btn small gold" style="margin-top:8px;" onclick="copyClientTextCustom('textToCopy_${group.code}')">Скопировать текст</button>
+        </div>
+
+        ${isExpanded ? `
+          <div style="margin-top:12px; border-top:1px dashed var(--line); padding-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap:10px;">
+            ${group.items.map((p, idx) => `
+              <div style="text-align:center; background:var(--surface); padding:6px; border-radius:6px; border:1px solid var(--line);">
+                <img src="${p.photoUrl}" style="width:100%; height:80px; object-fit:cover; border-radius:4px; cursor:pointer;" onclick="openLightbox('${p.photoUrl}')">
+                <div style="font-size:10px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'}; margin-top:4px;">
+                  ${p.downloaded ? '✓ Скачано' : '⏳ Ожидает'}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleClientTextVisibility(elementId) {
+  const el = document.getElementById(elementId);
+  if (el) {
+    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+  }
+}
+
+function copyClientTextCustom(elementId) {
+  const text = document.getElementById(elementId).innerText;
+  navigator.clipboard.writeText(text);
+  toast('Текст скопирован!');
+}
+
+function deletePhotoGroup(code) {
+  const groupPhotos = state.digitalPhotos.filter(p => p.code === code);
+  const downloadedCount = groupPhotos.filter(p => p.downloaded).length;
+
+  if (downloadedCount < groupPhotos.length) {
+    return alert('Удалить заказ невозможно! Покупатель еще не скачал все фотографии из этого заказа.');
+  }
+
+  if (confirm(`Удалить полностью заказ "${code}" (${groupPhotos.length} фото)?`)) {
+    state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== code);
+    saveData();
+    toast(`Заказ ${code} удален!`);
+  }
+}
+
 function renderEmployeeMainView(user, allowedPoints, point) {
   if(!allowedPoints.length) {
     return `<div class="panel">Вам не назначена ни одна точка. Обратитесь к владельцу.</div>`;
   }
 
   const myPhotos = state.digitalPhotos.filter(p => p.uploadedBy === user.username);
-  const myDownloadedCount = myPhotos.filter(p => p.downloaded).length;
+  const groupedMyPhotos = groupPhotosByCode(myPhotos);
   
   const pendingRequests = state.customerRequests 
     ? state.customerRequests.filter(r => r.status === 'pending' && r.pointId === point.id) 
@@ -854,24 +962,8 @@ function renderEmployeeMainView(user, allowedPoints, point) {
     </div>
 
     <div class="panel">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-        <h3 style="margin:0;">Загруженные вами фото (${myPhotos.length})</h3>
-        ${myDownloadedCount > 0 ? `<button class="btn small red" onclick="deleteMyDownloadedPhotos()">Удалить скачанные (${myDownloadedCount})</button>` : ''}
-      </div>
-      ${!myPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Вы пока не загружали фото</p>' :
-        myPhotos.map(p => {
-          const pt = state.points.find(x => x.id === p.pointId);
-          return `
-          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
-            <div>
-              <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
-              <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
-                ${p.downloaded ? 'Скачано' : 'Ожидает'}
-              </div>
-            </div>
-            <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
-          </div>`;
-        }).join('')}
+      <h3>Загруженные вами заказы (${groupedMyPhotos.length})</h3>
+      ${renderGroupedPhotoList(groupedMyPhotos, false)}
     </div>`;
 }
 
@@ -885,7 +977,6 @@ function fillUploadCodeFromRequest(requestId) {
   req.status = 'processing';
   session.activeCustomerRequest = req;
 
-  // Сохраняем изменения статуса заявки в базу, чтобы у продавца она пропала
   saveData();
 
   const user = currentUser();
@@ -1003,9 +1094,13 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
     return;
   }
 
+  isUploading = true; // Устанавливаем флаг загрузки
   toast(`Загрузка ${files.length} фото на ImgBB...`);
 
   let loadedCount = 0;
+  const activeReq = session.activeCustomerRequest;
+  const phone = activeReq ? activeReq.phone : '';
+
   for (const file of files) {
     const formData = new FormData();
     formData.append('image', file);
@@ -1021,6 +1116,7 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
         state.digitalPhotos.unshift({
           id: uid(),
           code,
+          phone: phone,
           photoUrl: result.data.url,
           uploadedBy: currentUser().username,
           pointId,
@@ -1037,8 +1133,9 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
     }
   }
 
+  isUploading = false; // Снимаем флаг загрузки
+
   if (loadedCount > 0) {
-    const activeReq = session.activeCustomerRequest;
     const siteUrl = window.location.href.split('?')[0];
 
     if (activeReq) {
@@ -1053,6 +1150,7 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
 
     delete formBuffer[codeInputId];
     saveData();
+    render();
     toast(`Успешно загружено фото: ${loadedCount}`);
   }
 }
@@ -1739,7 +1837,6 @@ function resetEverythingData() {
 
 /* ВЛАДЕЛЕЦ - БАЗА ФОТО И ЗАЯВКИ КЛИЕНТОВ */
 function renderOwnerPhotosTab() {
-  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
   const currentFilter = session.ownerRequestFilter || 'all';
   const pendingRequests = state.customerRequests ? state.customerRequests.filter(r => r.status === 'pending') : [];
   
@@ -1747,6 +1844,8 @@ function renderOwnerPhotosTab() {
     if (currentFilter === 'all') return true;
     return r.pointId === currentFilter;
   });
+
+  const groupedAllPhotos = groupPhotosByCode(state.digitalPhotos);
 
   return `
   <div class="panel">
@@ -1800,61 +1899,14 @@ function renderOwnerPhotosTab() {
   </div>
 
   <div class="panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <h3 style="margin:0;">База загруженных фото (${state.digitalPhotos.length})</h3>
-      ${downloadedCount > 0 ? `<button class="btn small red" onclick="deleteDownloadedPhotos()">Удалить все скачанные (${downloadedCount})</button>` : ''}
-    </div>
-    ${!state.digitalPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Файлы отсутствуют</p>' :
-      state.digitalPhotos.map(p => {
-        const pt = state.points.find(x => x.id === p.pointId);
-        return `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
-          <div>
-            <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
-            <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
-              ${p.downloaded ? 'Скачано' : 'Ожидает'} | Загрузил: ${p.uploadedBy}
-            </div>
-          </div>
-          <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
-        </div>`;
-      }).join('')}
+    <h3>База загруженных заказов (${groupedAllPhotos.length})</h3>
+    ${renderGroupedPhotoList(groupedAllPhotos, true)}
   </div>`;
 }
 
 function uploadOwnerPhoto() {
   const pointId = document.getElementById('ownerUploadPoint').value;
   uploadDigitalPhoto(pointId, 'ownerUploadCode', 'ownerUploadFile');
-}
-
-function deleteDigitalPhoto(id) {
-  state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== id && p.id !== id);
-  saveData();
-  toast('Фото удалено');
-}
-
-function deleteDownloadedPhotos() {
-  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
-  if (!downloadedCount) return toast('Нет скачанных фото для удаления', true);
-
-  if (confirm(`Удалить все скачанные фотографии (${downloadedCount} шт.) из базы?`)) {
-    state.digitalPhotos = state.digitalPhotos.filter(p => !p.downloaded);
-    saveData();
-    toast(`Удалено скачанных фото: ${downloadedCount}`);
-  }
-}
-
-function deleteMyDownloadedPhotos() {
-  const user = currentUser();
-  if(!user) return;
-  
-  const myDownloaded = state.digitalPhotos.filter(p => p.uploadedBy === user.username && p.downloaded);
-  if (!myDownloaded.length) return toast('У вас нет скачанных фото для удаления', true);
-
-  if (confirm(`Удалить все ваши скачанные фотографии (${myDownloaded.length} шт.)?`)) {
-    state.digitalPhotos = state.digitalPhotos.filter(p => !(p.uploadedBy === user.username && p.downloaded));
-    saveData();
-    toast(`Удалено ваших скачанных фото: ${myDownloaded.length}`);
-  }
 }
 
 function logout() {
