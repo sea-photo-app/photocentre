@@ -25,7 +25,7 @@
   .fade-in { animation: fadeIn .2s ease-out; }
   @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-  .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
+  .topbar { display:flex; align-items:center; justify-space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
   .role-chip { font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:600; letter-spacing:0.05em; }
 
   .nav-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 20px; background:var(--bg-2); border-bottom:1px solid var(--line); }
@@ -225,6 +225,9 @@ dbRef.on('value', (snapshot) => {
     return;
   }
 
+  // Проверка, изменились ли сообщения в чате
+  const chatChanged = data && JSON.stringify(state.chatMessages) !== JSON.stringify(data.chatMessages);
+
   if (data) {
     state = data;
     if (!state.masterPassword) state.masterPassword = '12345';
@@ -244,8 +247,7 @@ dbRef.on('value', (snapshot) => {
   }
 
   const activeElement = document.activeElement;
-  const isTypingInChat = activeElement && activeElement.id === 'chatInputText';
-  const isTypingOther = activeElement && activeElement.id !== 'chatInputText' && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
+  const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
 
   // Проверка, есть ли прикрепленные файлы
   const custFile = document.getElementById('custMagnetFile');
@@ -255,13 +257,13 @@ dbRef.on('value', (snapshot) => {
                    (empFile && empFile.files.length > 0) || 
                    (ownerFile && ownerFile.files.length > 0);
 
-  // Проверка заполненности клиентской формы
+  // Проверка заполнености клиентской формы
   const custName = document.getElementById('custName');
   const custPhone = document.getElementById('custPhone');
   const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
 
-  // Разрешаем рендер чата в режиме реального времени
-  if (!isTypingOther && !hasFiles && !hasUnsavedClientData) {
+  // Разрешаем обновление, если пришли сообщения в чат или если пользователь не пишет в текущий момент
+  if (chatChanged || (!isTyping && !hasFiles && !hasUnsavedClientData)) {
     render();
   }
 });
@@ -452,7 +454,7 @@ async function submitCustomerRequest() {
         status: 'pending'
       });
       
-      // Полная очистка локальных элементов формы и буфера
+      // Очищаем локальный буфер и элементы ввода после успешной отправки заявки
       delete formBuffer['custName'];
       delete formBuffer['custPhone'];
       delete formBuffer['custPointId'];
@@ -822,743 +824,1046 @@ function renderEmployeeMainView(user, allowedPoints, point) {
     <div class="panel">
       <h3>Отчет за день: ${point.name}</h3>
       <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="empDate" value="${todayStr()}" oninput="formBuffer['empDate']=this.value"></div>
-      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev" oninput="formBuffer['empRev']=this.value">Все три исправления внесены в исходный код:
+      <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="empRev" oninput="formBuffer['empRev']=this.value"></div>
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label class="field-label">Продано мал.</label><input type="number" id="empSm" value="0" oninput="formBuffer['empSm']=this.value"></div>
+        <div class="field" style="flex:1;"><label class="field-label">Продано бол.</label><input type="number" id="empBg" value="0" oninput="formBuffer['empBg']=this.value"></div>
+      </div>
+      <button class="btn green" onclick="submitEmployeeReport('${point.id}')">Отправить отчет</button>
+    </div>
 
-1. **Очистка формы клиента:** После успешной отправки заявки значения полей (`custName`, `custPhone`, `custPointId`) и прикрепленный файл очищаются, а также сбрасываются из временного буфера ввода[cite: 1].
-2. **Обновление чата в реальном времени:** В цикле прослушивания Firebase (`dbRef.on('value', ...)`) убрана задержка и блокировка перерендера, если открыт или активен чат[cite: 1]. Теперь входящие сообщения и счетчики уведомлений обновляются мгновенно без необходимости перезагружать страницу[cite: 1].
-3. **Удаление заявки при присвоении номера:** Функция `fillUploadCodeFromRequest()` сразу меняет статус заявки и скрывает ее из списка активных заявок (а не только при загрузке фото)[cite: 1]. Изменение сразу синхронизируется через Realtime Database, поэтому заявка моментально исчезает у всех продавцов этой точки и у владельца[cite: 1].
+    <div class="panel">
+      <h3>Загрузка фото для покупателя - ${point.name}</h3>
+      <div class="field">
+        <label class="field-label">Код заказа</label>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="uploadCode" placeholder="например 1024" oninput="formBuffer['uploadCode']=this.value">
+          <button class="btn small gold" style="width:130px; margin:0;" onclick="generateRandomCode('uploadCode')">🎲 Рандомный номер</button>
+        </div>
+      </div>
+      <div class="field"><label class="field-label">Выбрать фото</label><input type="file" id="uploadFile" accept="image/*" multiple></div>
+      <button class="btn blue" onclick="uploadDigitalPhoto('${point.id}', 'uploadCode', 'uploadFile')">Загрузить выбранные фото</button>
 
-Готовый обновленный HTML-код:
+      ${generatedClientText ? `
+        <div class="copy-box">
+          <div style="font-size:11px; color:var(--brass); margin-bottom:4px; font-weight:600;">Текст для клиента:</div>
+          <div id="textToCopy" style="font-size:13px; white-space:pre-wrap;">${generatedClientText}</div>
+          <button class="btn small gold" style="margin-top:8px;" onclick="copyClientText()">Скопировать текст</button>
+        </div>
+      ` : ''}
+    </div>
 
-```html
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Управление Фотоцентром</title>
-<link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-<link href="[https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap](https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap)" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0F0F10; --bg-2: #18181B; --surface: #1B1B1E; --surface-2: #232326;
-    --ink: #F1EDE4; --ink-soft: #9C978C; --line: #2A2A2D; --line-strong: #38383C;
-    --red: #C6685A; --blue: #7C9BC2; --brass: #C7A15C; --green: #7FAE8E;
-    --warn-tint: rgba(199,161,92,0.14); --danger-tint: rgba(198,104,90,0.15); --radius: 12px; --radius-sm: 8px;
-    color-scheme: dark;
-  }
-
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin:0; padding:0; width:100%; min-height:100vh; font-family:'IBM Plex Sans', sans-serif; background:var(--bg); color:var(--ink); }
-  button, input, select, textarea { font-family:inherit; touch-action: manipulation; }
-
-  #root { width: 100%; max-width: 1000px; margin: 0 auto; min-height: 100vh; padding-bottom: 80px; }
-  @media (min-width: 768px) { #root { padding-top: 16px; } }
-
-  .fade-in { animation: fadeIn .2s ease-out; }
-  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
-
-  .topbar { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:var(--surface); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:20; }
-  .role-chip { font-size:10px; text-transform:uppercase; color:var(--brass); font-weight:600; letter-spacing:0.05em; }
-
-  .nav-tabs { display:flex; gap:8px; overflow-x:auto; padding:12px 20px; background:var(--bg-2); border-bottom:1px solid var(--line); }
-  .tab-btn { padding:8px 14px; border:1px solid var(--line-strong); border-radius:var(--radius-sm); background:transparent; color:var(--ink-soft); font-size:12px; flex:none; cursor:pointer; position:relative; }
-  .tab-btn.active { background:var(--brass); color:#100F0D; border-color:var(--brass); font-weight:600; }
-
-  .content { padding:20px; }
-  .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:20px; }
-  .stat-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
-  .stat-label { font-size:11px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px; }
-  .stat-value { font-family:'IBM Plex Mono', monospace; font-size:20px; font-weight:600; color:var(--green); }
-
-  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:16px; }
-  .field { margin-bottom:12px; }
-  .field-label { font-size:11px; text-transform:uppercase; color:var(--ink-soft); display:block; margin-bottom:6px; }
-  
-  input[type=text], input[type=password], input[type=number], input[type=date], select, textarea { width:100%; border:1px solid var(--line-strong); background:var(--bg-2); padding:10px 12px; font-size:14px; color:var(--ink); border-radius:var(--radius-sm); outline:none; }
-  input:focus, select:focus, textarea:focus { border-color:var(--brass); }
-
-  .btn { border:none; background:var(--ink); color:var(--bg); padding:10px 16px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; border-radius:var(--radius-sm); font-weight:600; width:100%; cursor:pointer; margin-top:6px; position:relative; }
-  .btn.gold { background:var(--brass); color:#100F0D; }
-  .btn.blue { background:var(--blue); color:#fff; }
-  .btn.green { background:var(--green); color:#fff; }
-  .btn.red { background:var(--red); color:#fff; }
-  .btn.outline { background:transparent; border:1px solid var(--line-strong); color:var(--ink); }
-  .btn.small { width:auto; padding:6px 12px; font-size:11px; margin:0; }
-
-  .payout-card { border:1px solid var(--brass); background:var(--warn-tint); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px; }
-  .public-wrap { min-height:80vh; display:flex; flex-direction:column; align-items:center; justify-content:center; max-width:460px; margin:0 auto; padding:20px; text-align:center; }
-
-  /* Messenger & Chat Styles */
-  .messenger-layout { display: flex; flex-direction: column; height: 500px; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
-  @media (min-width: 600px) { .messenger-layout { flex-direction: row; } }
-  
-  .chat-sidebar { width: 100%; max-height: 180px; overflow-y: auto; border-bottom: 1px solid var(--line); background: var(--surface); }
-  @media (min-width: 600px) { .chat-sidebar { width: 220px; max-height: 100%; border-bottom: none; border-right: 1px solid var(--line); } }
-  
-  .dialog-item { padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
-  .dialog-item:hover, .dialog-item.active { background: var(--surface-2); }
-  .dialog-badge { background: var(--red); color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px; }
-
-  .chat-main { flex: 1; display: flex; flex-direction: column; height: 100%; }
-  .chat-header { padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--brass); }
-  .chat-box { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-2); }
-  .chat-msg { background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: 13px; position: relative; max-width: 85%; align-self: flex-start; }
-  .chat-msg.mine { border-color: var(--brass); background: rgba(199, 161, 92, 0.08); align-self: flex-end; }
-  .chat-msg-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; gap: 8px; }
-  .chat-msg-body { word-break: break-word; white-space: pre-wrap; margin-bottom: 6px; }
-
-  /* Notification Badge on buttons */
-  .badge { position: absolute; top: -4px; right: -4px; background: var(--red); color: #fff; font-size: 10px; font-weight: bold; border-radius: 10px; padding: 2px 5px; line-height: 1; min-width: 16px; text-align: center; }
-
-  /* Fullscreen Image Lightbox */
-  .lightbox-modal { display: none; position: fixed; z-index: 1000; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; padding: 20px; }
-  .lightbox-modal.active { display: flex; }
-  .lightbox-modal img { max-width: 95%; max-height: 95%; border-radius: var(--radius-sm); object-fit: contain; box-shadow: 0 0 20px rgba(0,0,0,0.8); }
-  .lightbox-close { position: absolute; top: 15px; right: 20px; color: #fff; font-size: 30px; cursor: pointer; font-weight: bold; }
-
-  .copy-box { background: var(--bg-2); border: 1px dashed var(--brass); padding: 12px; border-radius: var(--radius-sm); margin-top: 12px; text-align: left; }
-
-  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-family:'IBM Plex Mono', monospace; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s; }
-  #toast.show { opacity:1; }
-  #toast.err { background:var(--red); color:#fff; }
-</style>
-
-<script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js)"></script>
-<script src="[https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js](https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js)"></script>
-</head>
-<body>
-
-<div id="root"></div>
-<div id="toast"></div>
-
-<!-- Lightbox Modal -->
-<div id="lightboxModal" class="lightbox-modal" onclick="closeLightbox()">
-  <span class="lightbox-close">&times;</span>
-  <img id="lightboxImg" src="" alt="Увеличенное фото">
-</div>
-
-<script>
-// ==========================================
-// 1. CONFIG / КЛЮЧИ
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyAWjkzWoXK3F-YTjq5qPEVLL2Li6pAoO0g",
-  authDomain: "photo-center-tuapse.firebaseapp.com",
-  databaseURL: "[https://photo-center-tuapse-default-rtdb.europe-west1.firebasedatabase.app](https://photo-center-tuapse-default-rtdb.europe-west1.firebasedatabase.app)",
-  projectId: "photo-center-tuapse",
-  storageBucket: "photo-center-tuapse.firebasestorage.app",
-  messagingSenderId: "633147729123",
-  appId: "1:633147729123:web:04247d0657312a4301d1d6"
-};
-
-const IMGBB_API_KEY = "62e211fd034a3eb244e89ca683c7181b";
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const dbRef = db.ref('app_state');
-
-// ==========================================
-// 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И СОСТОЯНИЕ
-// ==========================================
-const money = n => (Math.round(n||0)).toLocaleString('ru-RU') + ' ₽';
-const uid = () => Math.random().toString(36).slice(2, 9);
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const nowFormatted = () => new Date().toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
-
-function defaultState() {
-  return {
-    masterPassword: '12345',
-    currentSeason: new Date().getFullYear().toString(),
-    users: [
-      { id: 'owner_1', username: 'Owner', password: '123', role: 'owner', salaryBalance: 0 }
-    ],
-    points: [
-      { id: 'pt_1', name: 'Главная точка', revenue: 0, small: 100, big: 100, salaryPercent: 10 }
-    ],
-    salesEntries: [],
-    purchaseEntries: [],
-    payoutRequests: [],
-    digitalPhotos: [],
-    archivedSeasons: [],
-    chatMessages: [],
-    customerRequests: []
-  };
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">Загруженные вами фото (${myPhotos.length})</h3>
+        ${myDownloadedCount > 0 ? `<button class="btn small red" onclick="deleteMyDownloadedPhotos()">Удалить скачанные (${myDownloadedCount})</button>` : ''}
+      </div>
+      ${!myPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Вы пока не загружали фото</p>' :
+        myPhotos.map(p => {
+          const pt = state.points.find(x => x.id === p.pointId);
+          return `
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+            <div>
+              <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+              <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
+                ${p.downloaded ? 'Скачано' : 'Ожидает'}
+              </div>
+            </div>
+            <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+          </div>`;
+        }).join('')}
+    </div>`;
 }
 
-let state = defaultState();
-let currentSearchResultHtml = ''; 
-let currentSearchedCode = '';
-let generatedClientText = '';
+function fillUploadCodeFromRequest(requestId) {
+  const req = state.customerRequests.find(r => r.id === requestId);
+  if(!req) return;
 
-// Буфер для сохранения состояния локальных полей ввода перед перерендером
-let formBuffer = {};
+  const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-const savedSession = JSON.parse(localStorage.getItem('app_session') || 'null');
-let session = savedSession || { 
-  userId: null, 
-  currentTab: 'download_public', 
-  publicMode: 'download',
-  ownerSubTab: 'overview', 
-  userSubTab: 'main', 
-  activeChatTarget: 'all',
-  ownerRequestFilter: 'all'
-};
+  req.currentAssignedCode = randomCode;
+  req.status = 'processing';
+  session.activeCustomerRequest = req;
 
-function saveSession() {
-  localStorage.setItem('app_session', JSON.stringify(session));
-}
+  // Сохраняем изменения статуса заявки в базу, чтобы у продавца она пропала
+  saveData();
 
-function toast(msg, isErr) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'show' + (isErr ? ' err' : '');
-  clearTimeout(toast._h);
-  toast._h = setTimeout(() => t.className = '', 2800);
-}
-
-function openLightbox(url) {
-  const modal = document.getElementById('lightboxModal');
-  const img = document.getElementById('lightboxImg');
-  if (modal && img) {
-    img.src = url;
-    modal.classList.add('active');
-  }
-}
-
-function closeLightbox() {
-  const modal = document.getElementById('lightboxModal');
-  if (modal) modal.classList.remove('active');
-}
-
-// Запоминание значений полей ввода перед обновлением DOM
-function preserveFormInputs() {
-  const inputs = document.querySelectorAll('input, select, textarea');
-  inputs.forEach(el => {
-    if (el.id && el.type !== 'file') {
-      formBuffer[el.id] = el.value;
-    }
-  });
-}
-
-// Восстановление значений полей ввода после обновления DOM
-function restoreFormInputs() {
-  Object.keys(formBuffer).forEach(id => {
-    const el = document.getElementById(id);
-    if (el && formBuffer[id] !== undefined && formBuffer[id] !== '') {
-      el.value = formBuffer[id];
-    }
-  });
-}
-
-dbRef.on('value', (snapshot) => {
-  const data = snapshot.val();
-  
-  if (data && JSON.stringify(state) === JSON.stringify(data)) {
-    return;
-  }
-
-  if (data) {
-    state = data;
-    if (!state.masterPassword) state.masterPassword = '12345';
-    if (!state.currentSeason) state.currentSeason = new Date().getFullYear().toString();
-    if (!state.users) state.users = [];
-    if (!state.points) state.points = [];
-    if (!state.salesEntries) state.salesEntries = [];
-    if (!state.purchaseEntries) state.purchaseEntries = [];
-    if (!state.payoutRequests) state.payoutRequests = [];
-    if (!state.digitalPhotos) state.digitalPhotos = [];
-    if (!state.archivedSeasons) state.archivedSeasons = [];
-    if (!state.chatMessages) state.chatMessages = [];
-    if (!state.customerRequests) state.customerRequests = [];
-  } else {
-    state = defaultState();
-    saveData();
-  }
-
-  const activeElement = document.activeElement;
-  const isTypingInForm = activeElement && 
-    (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT') && 
-    activeElement.id !== 'chatInputText';
-
-  // Проверка, есть ли прикрепленные файлы
-  const custFile = document.getElementById('custMagnetFile');
-  const empFile = document.getElementById('uploadFile');
-  const ownerFile = document.getElementById('ownerUploadFile');
-  const hasFiles = (custFile && custFile.files.length > 0) || 
-                   (empFile && empFile.files.length > 0) || 
-                   (ownerFile && ownerFile.files.length > 0);
-
-  // Проверка заполнености клиентской формы
-  const custName = document.getElementById('custName');
-  const custPhone = document.getElementById('custPhone');
-  const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
-
-  // При получении новых данных (сообщения чата, новые заявки) делаем рендер всегда, кроме набора текста в обычных формах
-  if (!isTypingInForm && !hasFiles && !hasUnsavedClientData) {
+  const user = currentUser();
+  if (user && user.role === 'owner') {
+    session.ownerSubTab = 'photos';
+    saveSession();
     render();
-  }
-});
-
-function saveData() {
-  dbRef.set(state).catch(err => {
-    toast('Ошибка сохранения в Базу Данных', true);
-    console.error(err);
-  });
-}
-
-function currentUser() { return state.users.find(u => u.id === session.userId) || null; }
-
-function getUnreadChatCount(userId) {
-  if (!userId) return 0;
-  return state.chatMessages.filter(m => {
-    const isForMe = (m.targetId === 'all' || m.targetId === userId);
-    const notMine = m.senderId !== userId;
-    const notRead = !m.readBy || !m.readBy.includes(userId);
-    return isForMe && notMine && notRead;
-  }).length;
-}
-
-function getUnreadCountForDialog(user, dialogId) {
-  return state.chatMessages.filter(m => {
-    const notMine = m.senderId !== user.id;
-    const notRead = !m.readBy || !m.readBy.includes(user.id);
-    if (dialogId === 'all') {
-      return m.targetId === 'all' && notMine && notRead;
-    } else {
-      return (m.senderId === dialogId && m.targetId === user.id) && notRead;
-    }
-  }).length;
-}
-
-function markMessagesAsRead(userId, dialogTarget) {
-  let updated = false;
-  state.chatMessages.forEach(m => {
-    const isTarget = (dialogTarget === 'all' && m.targetId === 'all') || 
-                     (dialogTarget !== 'all' && ((m.senderId === dialogTarget && m.targetId === userId) || (m.senderId === userId && m.targetId === dialogTarget)));
-    if (isTarget && m.senderId !== userId) {
-      if (!m.readBy) m.readBy = [];
-      if (!m.readBy.includes(userId)) {
-        m.readBy.push(userId);
-        updated = true;
+    setTimeout(() => {
+      const input = document.getElementById('ownerUploadCode');
+      const pointSelect = document.getElementById('ownerUploadPoint');
+      if(input) {
+        input.value = randomCode;
+        formBuffer['ownerUploadCode'] = randomCode;
       }
+      if(pointSelect && req.pointId) {
+        pointSelect.value = req.pointId;
+        formBuffer['ownerUploadPoint'] = req.pointId;
+      }
+      if(input) input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  } else {
+    const input = document.getElementById('uploadCode');
+    if(input) {
+      input.value = randomCode;
+      formBuffer['uploadCode'] = randomCode;
     }
-  });
-  if (updated) saveData();
+  }
+
+  toast(`Присвоен номер ${randomCode}. Загрузите фотографии.`);
 }
 
-function switchOwnerSubTab(tabName) {
-  session.ownerSubTab = tabName;
-  saveSession();
-  render();
+function generateRandomCode(inputId) {
+  const code = Math.floor(1000 + Math.random() * 9000).toString();
+  const el = document.getElementById(inputId);
+  if(el) {
+    el.value = code;
+    formBuffer[inputId] = code;
+  }
 }
 
-function switchUserSubTab(tabName) {
-  session.userSubTab = tabName;
-  saveSession();
-  render();
+function copyClientText() {
+  const text = document.getElementById('textToCopy').innerText;
+  navigator.clipboard.writeText(text);
+  toast('Текст скопирован!');
 }
 
-function switchCurrentTab(tabName) {
-  session.currentTab = tabName;
-  saveSession();
-  render();
-}
+function submitEmployeeReport(pointId) {
+  const reportDate = document.getElementById('empDate').value || todayStr();
+  const rev = parseFloat(document.getElementById('empRev').value) || 0;
+  const small = parseInt(document.getElementById('empSm').value) || 0;
+  const big = parseInt(document.getElementById('empBg').value) || 0;
+  if(rev <= 0) return toast('Введите корректную выручку', true);
 
-function render() {
-  preserveFormInputs(); // Сохраняем значения полей перед рендерингом
-  const scrollPos = window.scrollY;
-  const root = document.getElementById('root');
+  const point = state.points.find(p => p.id === pointId);
   const user = currentUser();
 
-  if (session.currentTab === 'download_public') {
-    root.innerHTML = renderPublicDownloadPage();
-    restoreFormInputs(); // Восстанавливаем данные полей
-    window.scrollTo(0, scrollPos);
-    return;
+  point.revenue += rev;
+  point.small = Math.max(0, point.small - small);
+  point.big = Math.max(0, point.big - big);
+
+  const earned = Math.round(rev * ((point.salaryPercent || 0) / 100));
+  user.salaryBalance = (user.salaryBalance || 0) + earned;
+
+  state.salesEntries.unshift({ id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: user.id, username: user.username, season: state.currentSeason });
+  
+  delete formBuffer['empRev'];
+  delete formBuffer['empSm'];
+  delete formBuffer['empBg'];
+
+  saveData();
+
+  if(confirm(`Отчет принят за ${reportDate}. Начислено: ${earned} ₽. Запросить выплату прямо сейчас?`)) {
+    const customAmountStr = prompt(`Укажите сумму для выплаты (Доступный баланс: ${user.salaryBalance} ₽):`, earned);
+    const amountToReq = parseFloat(customAmountStr);
+    
+    if (amountToReq && amountToReq > 0) {
+      if (amountToReq > user.salaryBalance) {
+        toast('Запрошенная сумма превышает доступный баланс!', true);
+      } else {
+        state.payoutRequests.unshift({ id: uid(), userId: user.id, username: user.username, amount: amountToReq, type: 'Выплата за день', date: reportDate, status: 'pending' });
+        saveData();
+        toast('Запрос на выплату отправлен!');
+      }
+    }
+  } else {
+    toast('Отчет сохранен!');
   }
-
-  if (!user) {
-    root.innerHTML = renderAuthPage();
-    restoreFormInputs();
-    window.scrollTo(0, scrollPos);
-    return;
-  }
-
-  if (user.role === 'owner') root.innerHTML = renderOwnerDashboard(user);
-  else if (user.role === 'employee') root.innerHTML = renderEmployeeDashboard(user);
-  else if (user.role === 'buyer') root.innerHTML = renderBuyerDashboard(user);
-
-  restoreFormInputs(); // Восстанавливаем данные полей
-  window.scrollTo(0, scrollPos);
 }
 
-/* PUBLIC DOWNLOAD & REQUEST PAGE */
-function renderPublicDownloadPage() {
-  const mode = session.publicMode || 'request';
+function requestCustomBalancePayout(userId) {
+  const u = currentUser();
+  const amountInput = parseFloat(document.getElementById('empPayoutAmount').value);
 
-  return `
-  <div class="public-wrap fade-in">
-    <div style="display:flex; gap:8px; width:100%; margin-bottom:16px;">
-      <button class="btn ${mode === 'request' ? 'gold' : 'outline'}" onclick="session.publicMode='request'; saveSession(); render();">Оформить заявку</button>
-      <button class="btn ${mode === 'download' ? 'gold' : 'outline'}" onclick="session.publicMode='download'; saveSession(); render();">Скачать фото</button>
-    </div>
+  if(!u.salaryBalance || u.salaryBalance <= 0) return toast('Баланс пуст', true);
+  if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
+  if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
+  
+  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  saveData();
+  toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
+}
 
-    ${mode === 'request' ? `
-      <h2>Получить фотографии</h2>
-      <p style="color:var(--ink-soft); font-size:13px;">Выберите точку покупки, заполните данные и сфотографируйте магнит</p>
+/* ЗАГРУЗКА ФОТО ЧЕРЕЗ IMGBB API */
+async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
+  const code = document.getElementById(codeInputId).value.trim();
+  const fileInput = document.getElementById(fileInputId);
+  const files = Array.from(fileInput ? fileInput.files || [] : []);
+
+  if(!code || !files.length) return toast('Укажите код и выберите файлы', true);
+
+  const isCodeExists = state.digitalPhotos.some(p => p.code === code);
+  if(isCodeExists) {
+    alert(`Ошибка! Заказ с номером "${code}" уже существует в базе.\nПожалуйста, смените номер заказа.`);
+    toast(`Номер "${code}" уже существует! Смените номер.`, true);
+    return;
+  }
+
+  toast(`Загрузка ${files.length} фото на ImgBB...`);
+
+  let loadedCount = 0;
+  for (const file of files) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const response = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        state.digitalPhotos.unshift({
+          id: uid(),
+          code,
+          photoUrl: result.data.url,
+          uploadedBy: currentUser().username,
+          pointId,
+          downloaded: false,
+          createdAt: Date.now()
+        });
+        loadedCount++;
+      } else {
+        toast(`Ошибка загрузки одного из файлов`, true);
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Сетевая ошибка при загрузке', true);
+    }
+  }
+
+  if (loadedCount > 0) {
+    const activeReq = session.activeCustomerRequest;
+    const siteUrl = window.location.href.split('?')[0];
+
+    if (activeReq) {
+      generatedClientText = `Здравствуйте, ${activeReq.name}! Ваш заказ готов 🎉\n\nНомер вашего заказа: ${code}\nДля скачивания перейдите на сайт:\n${siteUrl}\nВыберите «Скачать фото» и введите ваш код заказа: ${code}`;
       
-      <div class="panel" style="width:100%; text-align:left;">
-        <div class="field">
-          <label class="field-label">Точка, где вы покупали</label>
-          <select id="custPointId" onchange="formBuffer['custPointId']=this.value">
-            <option value="">-- Выберите точку --</option>
-            ${state.points.map(pt => `<option value="${pt.id}">${pt.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label class="field-label">Ваше Имя</label>
-          <input type="text" id="custName" placeholder="Иван" oninput="formBuffer['custName']=this.value">
-        </div>
-        <div class="field">
-          <label class="field-label">Номер телефона</label>
-          <input type="text" id="custPhone" placeholder="+7 900 000 00 00" oninput="formBuffer['custPhone']=this.value">
-        </div>
-        <div class="field">
-          <label class="field-label">Фотография магнита</label>
-          <input type="file" id="custMagnetFile" accept="image/*">
-        </div>
-        <button class="btn gold" onclick="submitCustomerRequest()">Отправить заявку продавцу</button>
-      </div>
-    ` : `
-      <h2>Скачать Фотографии</h2>
-      <p style="color:var(--ink-soft); font-size:13px;">Введите код заказа для получения фотографий</p>
-      <div style="width:100%; margin:16px 0;">
-        <input type="text" id="photoCodeInput" value="${currentSearchedCode}" placeholder="Код заказа (например 1024)" style="text-align:center; font-size:18px;" oninput="formBuffer['photoCodeInput']=this.value">
-        <button class="btn gold" onclick="searchPhotoByCode()">Найти фото</button>
-      </div>
-      <div id="photoSearchResult" style="width:100%;">${currentSearchResultHtml}</div>
-    `}
+      const reqInState = state.customerRequests.find(r => r.id === activeReq.id);
+      if(reqInState) reqInState.status = 'completed';
+      session.activeCustomerRequest = null;
+    } else {
+      generatedClientText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${code}`;
+    }
 
-    <div style="margin-top:24px; font-size:13px; color:var(--ink-soft); background:var(--surface); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--line); width:100%;">
-      Возникли проблемы или ошибки?<br>
-      Обратная связь: <a href="tel:+79256860074" style="color:var(--brass); text-decoration:none; font-weight:600;">+7 925 686 00 74</a>
+    delete formBuffer[codeInputId];
+    saveData();
+    toast(`Успешно загружено фото: ${loadedCount}`);
+  }
+}
+
+/* BUYER DASHBOARD */
+function renderBuyerDashboard(user) {
+  const unreadCount = getUnreadChatCount(user.id);
+  return `
+  <div class="topbar">
+    <div><b>Закупочный кабинет</b> <span class="role-chip">(${user.username})</span></div>
+    <div>
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='chat'?'main':'chat')">
+        ${session.userSubTab === 'chat' ? 'Главная' : '💬 Чат'}
+        ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ''}
+      </button>
+      <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='profile'?'main':'profile')">
+        ${session.userSubTab === 'profile' ? 'Главная' : 'Профиль'}
+      </button>
+      <button class="btn small outline" onclick="logout()">Выйти</button>
     </div>
-    <div style="margin-top:20px; border-top:1px solid var(--line); padding-top:20px; width:100%;">
-      <button class="btn outline" onclick="switchCurrentTab('login')">Вход для персонала</button>
-    </div>
+  </div>
+  <div class="content fade-in">
+    ${session.userSubTab === 'chat' ? renderChatSection(user) : ''}
+    ${session.userSubTab === 'profile' ? renderProfileCabinet(user) : ''}
+    ${session.userSubTab === 'main' ? renderBuyerMainView(user) : ''}
   </div>`;
 }
 
-async function submitCustomerRequest() {
-  const pointId = document.getElementById('custPointId').value;
-  const name = document.getElementById('custName').value.trim();
-  const phone = document.getElementById('custPhone').value.trim();
-  const fileInput = document.getElementById('custMagnetFile');
-  const file = fileInput ? fileInput.files[0] : null;
+function renderBuyerMainView(user) {
+  const allowedPoints = state.points.filter(p => user.assignedPoints && user.assignedPoints.includes(p.id));
+  if(!allowedPoints.length) {
+    return `<div class="panel">Вам не назначена ни одна точка.</div>`;
+  }
 
-  if(!pointId) return toast('Выберите точку, где делали покупку', true);
-  if(!name || !phone || !file) return toast('Заполните имя, телефон и выберите фото магнита', true);
+  const selectedPtId = session.selectedBuyerPointId || allowedPoints[0].id;
+  const point = state.points.find(p => p.id === selectedPtId);
 
-  toast('Загрузка снимка...');
-
-  const formData = new FormData();
-  formData.append('image', file);
-
-  try {
-    const response = await fetch(`[https://api.imgbb.com/1/upload?key=$](https://api.imgbb.com/1/upload?key=$){IMGBB_API_KEY}`, {
-      method: 'POST',
-      body: formData
-    });
-    const result = await response.json();
-
-    if(result.success) {
-      state.customerRequests.unshift({
-        id: uid(),
-        pointId,
-        name,
-        phone,
-        magnetUrl: result.data.url,
-        date: nowFormatted(),
-        status: 'pending'
-      });
+  return `
+    <div class="panel" style="border-color:var(--brass);">
+      <div class="stat-label">Мой Баланс Зарплаты</div>
+      <div class="stat-value">${money(user.salaryBalance || 0)}</div>
       
-      // Очищаем DOM элементы и локальный буфер после успешной отправки заявки
-      document.getElementById('custName').value = '';
-      document.getElementById('custPhone').value = '';
-      document.getElementById('custPointId').value = '';
-      if(fileInput) fileInput.value = '';
-
-      delete formBuffer['custName'];
-      delete formBuffer['custPhone'];
-      delete formBuffer['custPointId'];
-
-      saveData();
-      alert('Заявка успешно отправлена! Продавец этой точки уже обрабатывает её.');
-      session.publicMode = 'download';
-      saveSession();
-      render();
-    } else {
-      toast('Ошибка загрузки фото', true);
-    }
-  } catch(e) {
-    toast('Ошибка сети при загрузке', true);
-  }
-}
-
-function rejectCustomerRequest(requestId) {
-  if (confirm('Отклонить эту заявку от клиента?')) {
-    const req = state.customerRequests.find(r => r.id === requestId);
-    if (req) {
-      req.status = 'rejected';
-      saveData();
-      toast('Заявка отклонена');
-    }
-  }
-}
-
-function searchPhotoByCode() {
-  const codeInput = document.getElementById('photoCodeInput');
-  const code = codeInput ? codeInput.value.trim() : '';
-  const res = document.getElementById('photoSearchResult');
-  if(!code) return toast('Введите код', true);
-
-  currentSearchedCode = code;
-
-  const photos = state.digitalPhotos.filter(p => p.code === code);
-  if(!photos.length) {
-    currentSearchResultHtml = `<p style="color:var(--red); margin-top:12px;">Фотографии не найдены</p>`;
-    if (res) res.innerHTML = currentSearchResultHtml;
-    return;
-  }
-
-  currentSearchResultHtml = `
-    <div style="margin-top:16px; width:100%;">
-      <p style="font-size:13px; color:var(--green); font-weight:600; margin-bottom:12px;">Найдено снимков: ${photos.length}</p>
-      ${photos.map((p, idx) => `
-        <div class="panel fade-in" style="margin-bottom:12px; text-align:left;">
-          <img src="${p.photoUrl}" style="width:100%; border-radius:var(--radius-sm); margin-bottom:10px; cursor:pointer;" onclick="openLightbox('${p.photoUrl}')">
-          <button class="btn green" onclick="downloadPhotoFile('${p.id}', '${p.photoUrl}', 'photo_${p.code}_${idx+1}.jpg')">Скачать оригинал</button>
+      <div style="margin-top:12px; border-top:1px solid var(--line); padding-top:10px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label class="field-label">Запросить выплату (укажите сумму):</label>
+          <input type="number" id="buyerPayoutAmount" value="${user.salaryBalance || 0}" oninput="formBuffer['buyerPayoutAmount']=this.value">
         </div>
-      `).join('')}
+        <button class="btn small gold" onclick="requestCustomBalancePayoutBuyer('${user.id}')">Запросить вывод баланса</button>
+      </div>
     </div>
-  `;
-  if (res) res.innerHTML = currentSearchResultHtml;
+
+    <div class="nav-tabs" style="padding:0 0 10px 0; background:transparent;">
+      ${allowedPoints.map(p => `<button class="tab-btn ${p.id === point.id ? 'active' : ''}" onclick="session.selectedBuyerPointId='${p.id}'; saveSession(); render();">${p.name}</button>`).join('')}
+    </div>
+
+    <div class="panel">
+      <h3>Оформить закупку на точку: ${point.name}</h3>
+      <div style="display:flex; gap:10px;">
+        <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="buySm" value="0" oninput="formBuffer['buySm']=this.value"></div>
+        <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="buyBg" value="0" oninput="formBuffer['buyBg']=this.value"></div>
+      </div>
+      <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="buyCost" value="0" oninput="formBuffer['buyCost']=this.value"></div>
+      <button class="btn blue" onclick="submitPurchase('${point.id}')">Внести закупку</button>
+    </div>`;
 }
 
-function downloadPhotoFile(photoId, url, filename) {
-  const p = state.digitalPhotos.find(item => item.id === photoId);
-  if (p) {
-    p.downloaded = true;
-    p.downloadCount = (p.downloadCount || 0) + 1;
+function requestCustomBalancePayoutBuyer(userId) {
+  const u = currentUser();
+  const amountInput = parseFloat(document.getElementById('buyerPayoutAmount').value);
+
+  if(!u.salaryBalance || u.salaryBalance <= 0) return toast('Баланс пуст', true);
+  if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
+  if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
+  
+  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  saveData();
+  toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
+}
+
+function submitPurchase(pointId) {
+  const small = parseInt(document.getElementById('buySm').value) || 0;
+  const big = parseInt(document.getElementById('buyBg').value) || 0;
+  const cost = parseFloat(document.getElementById('buyCost').value) || 0;
+
+  const point = state.points.find(p => p.id === pointId);
+  point.small += small;
+  point.big += big;
+  point.revenue -= cost;
+
+  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: currentUser().username, season: state.currentSeason });
+  
+  delete formBuffer['buySm'];
+  delete formBuffer['buyBg'];
+  delete formBuffer['buyCost'];
+
+  saveData();
+  toast('Закупка проведена');
+}
+
+/* OWNER DASHBOARD */
+function renderOwnerDashboard(user) {
+  const unreadCount = getUnreadChatCount(user.id);
+  const pendingCustomerRequestsCount = state.customerRequests ? state.customerRequests.filter(r => r.status === 'pending').length : 0;
+
+  return `
+  <div class="topbar">
+    <div><b>Панель Владельца</b> <span class="role-chip">(${state.currentSeason} Сезон)</span></div>
+    <button class="btn small outline" onclick="logout()">Выйти</button>
+  </div>
+  <div class="nav-tabs">
+    <button class="tab-btn ${session.ownerSubTab==='overview'?'active':''}" onclick="switchOwnerSubTab('overview')">Обзор</button>
+    <button class="tab-btn ${session.ownerSubTab==='photos'?'active':''}" onclick="switchOwnerSubTab('photos')">
+      База Фото ${pendingCustomerRequestsCount > 0 ? `<span class="badge">${pendingCustomerRequestsCount}</span>` : ''}
+    </button>
+    <button class="tab-btn ${session.ownerSubTab==='chat'?'active':''}" onclick="switchOwnerSubTab('chat')">
+      💬 Чат ${unreadCount > 0 ? `<span class="badge">${unreadCount}</span>` : ''}
+    </button>
+    <button class="tab-btn ${session.ownerSubTab==='owner_report'?'active':''}" onclick="switchOwnerSubTab('owner_report')">Сдать Отчет</button>
+    <button class="tab-btn ${session.ownerSubTab==='purchases'?'active':''}" onclick="switchOwnerSubTab('purchases')">Закупки</button>
+    <button class="tab-btn ${session.ownerSubTab==='points'?'active':''}" onclick="switchOwnerSubTab('points')">Точки</button>
+    <button class="tab-btn ${session.ownerSubTab==='team'?'active':''}" onclick="switchOwnerSubTab('team')">Команда и Балансы</button>
+    <button class="tab-btn ${session.ownerSubTab==='logs'?'active':''}" onclick="switchOwnerSubTab('logs')">Отчеты года</button>
+    <button class="tab-btn ${session.ownerSubTab==='archive'?'active':''}" onclick="switchOwnerSubTab('archive')">Архив сезонов</button>
+    <button class="tab-btn ${session.ownerSubTab==='seasons_control'?'active':''}" onclick="switchOwnerSubTab('seasons_control')" style="border-color:var(--red); color:var(--red);">Смена/Сброс Года</button>
+    <button class="tab-btn ${session.ownerSubTab==='profile'?'active':''}" onclick="switchOwnerSubTab('profile')">Профиль</button>
+  </div>
+  <div class="content fade-in">
+    ${session.ownerSubTab === 'overview' ? renderOwnerOverviewTab() : ''}
+    ${session.ownerSubTab === 'photos' ? renderOwnerPhotosTab() : ''}
+    ${session.ownerSubTab === 'chat' ? renderChatSection(user) : ''}
+    ${session.ownerSubTab === 'owner_report' ? renderOwnerReportTab() : ''}
+    ${session.ownerSubTab === 'purchases' ? renderOwnerPurchasesTab() : ''}
+    ${session.ownerSubTab === 'points' ? renderOwnerPointsTab() : ''}
+    ${session.ownerSubTab === 'team' ? renderOwnerTeamTab() : ''}
+    ${session.ownerSubTab === 'logs' ? renderOwnerLogsTab() : ''}
+    ${session.ownerSubTab === 'archive' ? renderOwnerArchiveTab() : ''}
+    ${session.ownerSubTab === 'seasons_control' ? renderOwnerSeasonsControlTab() : ''}
+    ${session.ownerSubTab === 'profile' ? renderProfileCabinet(user) : ''}
+  </div>`;
+}
+
+function renderOwnerOverviewTab() {
+  const totalRev = state.points.reduce((s, p) => s + p.revenue, 0);
+  const totalPurchases = state.purchaseEntries.reduce((s, p) => s + p.cost, 0);
+  const pendingPayouts = state.users.reduce((s, u) => s + (u.salaryBalance || 0), 0);
+
+  return `
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Касса (${state.currentSeason} г.)</div><div class="stat-value">${money(totalRev)}</div></div>
+    <div class="stat-card"><div class="stat-label">Расходы на закупки</div><div class="stat-value" style="color:var(--red);">${money(totalPurchases)}</div></div>
+    <div class="stat-card"><div class="stat-label">Задолженность по зарплате</div><div class="stat-value" style="color:var(--brass);">${money(pendingPayouts)}</div></div>
+  </div>
+
+  <div class="panel">
+    <h3>Сводка по точкам</h3>
+    ${state.points.map(p => `
+      <div style="border-bottom:1px solid var(--line); padding:10px 0; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <b>${p.name}</b>
+          <div style="font-size:12px; color:var(--ink-soft);">
+            Остаток: ${p.small} мал. ${p.small<=10?'':''} / ${p.big} бол. ${p.big<=10?'':''}
+          </div>
+        </div>
+        <div style="font-family:'IBM Plex Mono'; font-weight:600; color:var(--green);">${money(p.revenue)}</div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function renderOwnerReportTab() {
+  return `
+  <div class="panel">
+    <h3>Внести отчет за день (как Владелец)</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerReportPoint" onchange="formBuffer['ownerReportPoint']=this.value">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label class="field-label">Дата отчета</label><input type="date" id="ownerReportDate" value="${todayStr()}" oninput="formBuffer['ownerReportDate']=this.value"></div>
+    <div class="field"><label class="field-label">Выручка, ₽</label><input type="number" id="ownerReportRev" placeholder="0" oninput="formBuffer['ownerReportRev']=this.value"></div>
+    <div style="display:flex; gap:10px;">
+      <div class="field" style="flex:1;"><label class="field-label">Продано мал. (шт)</label><input type="number" id="ownerReportSm" value="0" oninput="formBuffer['ownerReportSm']=this.value"></div>
+      <div class="field" style="flex:1;"><label class="field-label">Продано бол. (шт)</label><input type="number" id="ownerReportBg" value="0" oninput="formBuffer['ownerReportBg']=this.value"></div>
+    </div>
+    <button class="btn green" onclick="submitOwnerReport()">Провести отчет без зарплаты</button>
+  </div>`;
+}
+
+function submitOwnerReport() {
+  const pointId = document.getElementById('ownerReportPoint').value;
+  const reportDate = document.getElementById('ownerReportDate').value || todayStr();
+  const rev = parseFloat(document.getElementById('ownerReportRev').value) || 0;
+  const small = parseInt(document.getElementById('ownerReportSm').value) || 0;
+  const big = parseInt(document.getElementById('ownerReportBg').value) || 0;
+
+  if(!pointId || rev <= 0) return toast('Укажите точку и выручку', true);
+
+  const point = state.points.find(p => p.id === pointId);
+  point.revenue += rev;
+  point.small = Math.max(0, point.small - small);
+  point.big = Math.max(0, point.big - big);
+
+  state.salesEntries.unshift({
+    id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: currentUser().id, username: 'Владелец (Owner)', season: state.currentSeason
+  });
+
+  delete formBuffer['ownerReportRev'];
+  delete formBuffer['ownerReportSm'];
+  delete formBuffer['ownerReportBg'];
+
+  saveData();
+  toast('Отчет зафиксирован');
+}
+
+function renderOwnerPurchasesTab() {
+  return `
+  <div class="panel">
+    <h3>Проведение закупки (как Владелец)</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerBuyPoint" onchange="formBuffer['ownerBuyPoint']=this.value">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <div class="field" style="flex:1;"><label class="field-label">+ Маленьких (шт)</label><input type="number" id="ownerBuySm" value="0" oninput="formBuffer['ownerBuySm']=this.value"></div>
+      <div class="field" style="flex:1;"><label class="field-label">+ Больших (шт)</label><input type="number" id="ownerBuyBg" value="0" oninput="formBuffer['ownerBuyBg']=this.value"></div>
+    </div>
+    <div class="field"><label class="field-label">Потрачено денег, ₽</label><input type="number" id="ownerBuyCost" value="0" oninput="formBuffer['ownerBuyCost']=this.value"></div>
+    <button class="btn blue" onclick="submitOwnerPurchase()">Внести закупку</button>
+  </div>`;
+}
+
+function submitOwnerPurchase() {
+  const pointId = document.getElementById('ownerBuyPoint').value;
+  const small = parseInt(document.getElementById('ownerBuySm').value) || 0;
+  const big = parseInt(document.getElementById('ownerBuyBg').value) || 0;
+  const cost = parseFloat(document.getElementById('ownerBuyCost').value) || 0;
+
+  const point = state.points.find(p => p.id === pointId);
+  point.small += small;
+  point.big += big;
+  point.revenue -= cost;
+
+  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: 'Владелец', season: state.currentSeason });
+  
+  delete formBuffer['ownerBuySm'];
+  delete formBuffer['ownerBuyBg'];
+  delete formBuffer['ownerBuyCost'];
+
+  saveData();
+  toast('Закупка проведена');
+}
+
+function renderOwnerPointsTab() {
+  return `
+  <div class="panel">
+    <h3>Редактирование точек</h3>
+    ${state.points.map(p => `
+      <div style="border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
+        <div class="field"><label class="field-label">Название точки</label><input type="text" value="${p.name}" onchange="updatePointData('${p.id}', 'name', this.value)"></div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label class="field-label">Касса (₽)</label><input type="number" value="${p.revenue}" onchange="updatePointData('${p.id}', 'revenue', parseFloat(this.value))"></div>
+          <div class="field" style="flex:1;"><label class="field-label">Зарплатный %</label><input type="number" value="${p.salaryPercent||0}" onchange="updatePointData('${p.id}', 'salaryPercent', parseFloat(this.value))"></div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div class="field" style="flex:1;"><label class="field-label">Остаток мал.</label><input type="number" value="${p.small}" onchange="updatePointData('${p.id}', 'small', parseInt(this.value))"></div>
+          <div class="field" style="flex:1;"><label class="field-label">Остаток бол.</label><input type="number" value="${p.big}" onchange="updatePointData('${p.id}', 'big', parseInt(this.value))"></div>
+        </div>
+        <button class="btn red small" onclick="deletePoint('${p.id}')">Удалить точку</button>
+      </div>
+    `).join('')}
+    <button class="btn gold" onclick="addNewPoint()">+ Добавить точку</button>
+  </div>`;
+}
+
+function updatePointData(id, key, val) {
+  const p = state.points.find(x => x.id === id);
+  if(p) { p[key] = val; saveData(); toast('Сохранено'); }
+}
+
+function deletePoint(id) {
+  if(confirm('Удалить эту точку?')) {
+    state.points = state.points.filter(p => p.id !== id);
     saveData();
   }
-
-  fetch(url)
-    .then(res => res.blob())
-    .then(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      toast('Загрузка начата...');
-    })
-    .catch(() => {
-      window.open(url, '_blank');
-    });
 }
 
-function renderAuthPage() {
+function addNewPoint() {
+  const name = prompt('Введите название точки:');
+  if(!name) return;
+  state.points.push({ id: uid(), name, revenue:0, small:0, big:0, salaryPercent:10 });
+  saveData();
+}
+
+function renderOwnerTeamTab() {
+  const pendingRequests = state.payoutRequests.filter(r => r.status === 'pending');
+
   return `
-  <div class="public-wrap fade-in">
-    <h2>Вход в Систему</h2>
-    <p style="color:var(--ink-soft); font-size:13px; margin-bottom:20px;">Авторизация для сотрудников и владельца</p>
-    <div class="panel" style="width:100%; text-align:left;">
-      <div class="field">
-        <label class="field-label">Логин</label>
-        <input type="text" id="loginUsername" placeholder="Введите логин" oninput="formBuffer['loginUsername']=this.value">
+  <div class="panel" style="border-color:var(--brass);">
+    <h3>Запросы на выплату (${pendingRequests.length})</h3>
+    ${!pendingRequests.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет нерассмотренных запросов</p>' : 
+      pendingRequests.map(r => `
+        <div class="payout-card">
+          <div><b>${r.username}</b> — Запросил: <span style="color:var(--green); font-weight:600;">${money(r.amount)}</span></div>
+          <div style="font-size:11px; color:var(--ink-soft);">${r.date} (${r.type})</div>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn small green" onclick="approvePayout('${r.id}')">Подтвердить (${money(r.amount)})</button>
+            <button class="btn small red" onclick="rejectPayout('${r.id}')">Отказать</button>
+          </div>
+        </div>
+      `).join('')}
+  </div>
+
+  <div class="panel">
+    <h3>Управление сотрудниками</h3>
+    ${state.users.filter(u => u.role !== 'owner').map(u => `
+      <div style="border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <b>${u.username}</b>
+          <span>Баланс: <b style="color:var(--green); font-size:16px;">${money(u.salaryBalance||0)}</b></span>
+        </div>
+        
+        <div class="field" style="margin-top:8px;">
+          <label class="field-label">Роль:</label>
+          <select onchange="updateUserRole('${u.id}', this.value)">
+            <option value="employee" ${u.role==='employee'?'selected':''}>Продавец</option>
+            <option value="buyer" ${u.role==='buyer'?'selected':''}>Закупщик</option>
+          </select>
+        </div>
+        
+        <div class="field">
+          <label class="field-label">Доступные точки:</label>
+          ${renderPointAssignmentSelector(u)}
+        </div>
+
+        <div style="background:var(--bg-2); padding:10px; border-radius:var(--radius-sm); margin:10px 0;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn small green" onclick="adjustBalancePrompt('${u.id}', 'add')">+ Премия</button>
+            <button class="btn small red" onclick="adjustBalancePrompt('${u.id}', 'sub')">- Списать</button>
+            <button class="btn small outline" onclick="manualClearBalance('${u.id}')">Обнулить</button>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="btn small gold" onclick="resetUserPasswordPrompt('${u.id}')">Сбросить пароль</button>
+          <button class="btn small red" onclick="deleteUser('${u.id}')">Удалить сотрудника</button>
+        </div>
       </div>
-      <div class="field">
-        <label class="field-label">Пароль</label>
-        <input type="password" id="loginPassword" placeholder="Введите пароль" oninput="formBuffer['loginPassword']=this.value">
-      </div>
-      <button class="btn gold" onclick="handleLogin()">Войти</button>
-    </div>
-    <button class="btn outline" style="margin-top:16px;" onclick="switchCurrentTab('download_public')">Вернуться к скачиванию</button>
+    `).join('')}
+    <button class="btn gold" onclick="addNewUser()">+ Зарегистрировать сотрудника</button>
   </div>`;
 }
 
-function handleLogin() {
-  const u = document.getElementById('loginUsername').value.trim();
-  const p = document.getElementById('loginPassword').value.trim();
-  const user = state.users.find(usr => usr.username.toLowerCase() === u.toLowerCase() && usr.password === p);
+function resetUserPasswordPrompt(userId) {
+  const u = state.users.find(x => x.id === userId);
+  const newPass = prompt(`Новый пароль для ${u.username}:`);
+  if(!newPass) return;
+  u.password = newPass;
+  saveData();
+  toast(`Пароль для ${u.username} изменен`);
+}
 
-  if(!user) return toast('Неверный логин или пароль', true);
+function adjustBalancePrompt(userId, action) {
+  const u = state.users.find(x => x.id === userId);
+  const amountStr = prompt(action === 'add' ? 'Сумма премии (₽):' : 'Сумма списания (₽):');
+  const amount = parseFloat(amountStr);
+  if(!amount || amount <= 0) return;
 
-  session.userId = user.id;
-  session.currentTab = 'app';
-  if(user.role === 'owner') session.ownerSubTab = 'overview';
-  else session.userSubTab = 'main';
+  if(action === 'add') u.salaryBalance = (u.salaryBalance || 0) + amount;
+  else u.salaryBalance = Math.max(0, (u.salaryBalance || 0) - amount);
+
+  saveData();
+}
+
+function renderPointAssignmentSelector(user) {
+  return state.points.map(p => {
+    const checked = user.assignedPoints && user.assignedPoints.includes(p.id);
+    return `<label style="display:inline-block; margin-right:10px; font-size:12px;">
+      <input type="checkbox" ${checked?'checked':''} onchange="toggleUserPoint('${user.id}', '${p.id}', this.checked)"> ${p.name}
+    </label>`;
+  }).join('');
+}
+
+function toggleUserPoint(userId, pointId, isChecked) {
+  const u = state.users.find(x => x.id === userId);
+  if(!u.assignedPoints) u.assignedPoints = [];
+  if(isChecked) {
+    if(!u.assignedPoints.includes(pointId)) u.assignedPoints.push(pointId);
+  } else {
+    u.assignedPoints = u.assignedPoints.filter(id => id !== pointId);
+  }
+  saveData();
+}
+
+function updateUserRole(userId, role) {
+  const u = state.users.find(x => x.id === userId);
+  u.role = role;
+  saveData();
+}
+
+function manualClearBalance(userId) {
+  const u = state.users.find(x => x.id === userId);
+  if(confirm(`Обнулить баланс ${money(u.salaryBalance||0)} сотрудника ${u.username}?`)) {
+    u.salaryBalance = 0;
+    saveData();
+  }
+}
+
+function approvePayout(requestId) {
+  const req = state.payoutRequests.find(r => r.id === requestId);
+  if (!req) return;
+  const user = state.users.find(u => u.id === req.userId);
+  if (confirm(`Выплатить ${money(req.amount)}?`)) {
+    if(user) user.salaryBalance = Math.max(0, (user.salaryBalance || 0) - req.amount);
+    state.payoutRequests = state.payoutRequests.filter(r => r.id !== requestId);
+    saveData();
+  }
+}
+
+function rejectPayout(requestId) {
+  if (confirm(`Отклонить запрос?`)) {
+    state.payoutRequests = state.payoutRequests.filter(r => r.id !== requestId);
+    saveData();
+  }
+}
+
+function addNewUser() {
+  const u = prompt('Логин сотрудника:');
+  const p = prompt('Пароль:');
+  if(!u || !p) return;
+  state.users.push({ id: uid(), username: u, password: p, role: 'employee', assignedPoints: [], salaryBalance: 0 });
+  saveData();
+}
+
+function deleteUser(id) {
+  if(confirm('Удалить сотрудника?')) {
+    state.users = state.users.filter(u => u.id !== id);
+    saveData();
+  }
+}
+
+/* ТЕКУЩИЕ ОТЧЕТЫ ГОДА */
+function renderOwnerLogsTab() {
+  return `
+  <div class="panel">
+    <h3>Продажи за текущий сезон (${state.currentSeason})</h3>
+    ${!state.salesEntries.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет записей</p>' :
+      state.salesEntries.map(s => {
+        const pt = state.points.find(p => p.id === s.pointId);
+        return `<div style="border-bottom:1px solid var(--line); padding:8px 0; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <b>${s.date}</b> — ${pt ? pt.name : 'Точка'}: <b>${money(s.revenue)}</b> (${s.small} мал / ${s.big} бол) [${s.username}]
+          </div>
+          <div>
+            <button class="btn small gold" onclick="editSaleEntryCurrent('${s.id}')">Редактировать</button>
+            <button class="btn small red" onclick="deleteSaleEntryCurrent('${s.id}')">Удалить</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>
+
+  <div class="panel">
+    <h3>Закупки за текущий сезон (${state.currentSeason})</h3>
+    ${!state.purchaseEntries.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет записей</p>' :
+      state.purchaseEntries.map(p => {
+        const pt = state.points.find(x => x.id === p.pointId);
+        return `<div style="border-bottom:1px solid var(--line); padding:8px 0; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <b>${p.date}</b> — ${pt ? pt.name : 'Точка'}: потрачено <b>${money(p.cost)}</b> (+${p.small} мал / +${p.big} бол) [${p.username}]
+          </div>
+          <div>
+            <button class="btn small red" onclick="deletePurchaseEntryCurrent('${p.id}')">Удалить</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function editSaleEntryCurrent(id) {
+  const item = state.salesEntries.find(x => x.id === id);
+  if(!item) return;
+
+  const newRev = prompt('Изменить выручку (₽):', item.revenue);
+  if(newRev === null) return;
+  const newSm = prompt('Изменить кол-во маленьких:', item.small);
+  const newBg = prompt('Изменить кол-во больших:', item.big);
+
+  item.revenue = parseFloat(newRev) || 0;
+  item.small = parseInt(newSm) || 0;
+  item.big = parseInt(newBg) || 0;
+
+  saveData();
+  toast('Запись изменена');
+}
+
+function deleteSaleEntryCurrent(id) {
+  if(confirm('Удалить запись продажи?')) {
+    state.salesEntries = state.salesEntries.filter(x => x.id !== id);
+    saveData();
+  }
+}
+
+function deletePurchaseEntryCurrent(id) {
+  if(confirm('Удалить запись закупки?')) {
+    state.purchaseEntries = state.purchaseEntries.filter(x => x.id !== id);
+    saveData();
+  }
+}
+
+/* ВЛАДЕЛЕЦ - АРХИВ ПРОШЛЫХ СЕЗОНОВ */
+function renderOwnerArchiveTab() {
+  if(!state.archivedSeasons.length) {
+    return `<div class="panel"><h3>Архив сезонов пуст</h3><p style="font-size:12px; color:var(--ink-soft);">Здесь будут храниться отчеты прошлых лет после завершения сезонов.</p></div>`;
+  }
+
+  return `
+  <div class="panel">
+    <h3>Архив Прошлых Сезонов</h3>
+    ${state.archivedSeasons.map(archive => `
+      <div style="border:1px solid var(--brass); border-radius:var(--radius-sm); padding:12px; margin-bottom:16px;">
+        <h4 style="margin:0 0 10px 0; color:var(--brass);">Сезон: ${archive.seasonName}</h4>
+        
+        <b>Продажи (${archive.salesEntries ? archive.salesEntries.length : 0}):</b>
+        <div style="max-height:200px; overflow-y:auto; margin:8px 0; background:var(--bg-2); padding:8px; border-radius:6px;">
+          ${!archive.salesEntries || !archive.salesEntries.length ? '<p style="font-size:11px; color:var(--ink-soft);">Нет записей</p>' : 
+            archive.salesEntries.map(s => `
+              <div style="border-bottom:1px solid var(--line); padding:6px 0; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                <span><b>${s.date}</b> | Выручка: <b>${money(s.revenue)}</b> (${s.small}м / ${s.big}б) [${s.username}]</span>
+                <span>
+                  <button class="btn small gold" onclick="editArchivedSale('${archive.seasonName}', '${s.id}')">Изм</button>
+                  <button class="btn small red" onclick="deleteArchivedSale('${archive.seasonName}', '${s.id}')">Уд</button>
+                </span>
+              </div>
+            `).join('')}
+        </div>
+
+        <b>Закупки (${archive.purchaseEntries ? archive.purchaseEntries.length : 0}):</b>
+        <div style="max-height:150px; overflow-y:auto; margin:8px 0; background:var(--bg-2); padding:8px; border-radius:6px;">
+          ${!archive.purchaseEntries || !archive.purchaseEntries.length ? '<p style="font-size:11px; color:var(--ink-soft);">Нет записей</p>' : 
+            archive.purchaseEntries.map(p => `
+              <div style="border-bottom:1px solid var(--line); padding:6px 0; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                <span><b>${p.date}</b> | Потрачено: <b>${money(p.cost)}</b> (+${p.small}м / +${p.big}б) [${p.username}]</span>
+                <button class="btn small red" onclick="deleteArchivedPurchase('${archive.seasonName}', '${p.id}')">Уд</button>
+              </div>
+            `).join('')}
+        </div>
+
+        <button class="btn red small" onclick="deleteEntireArchivedSeason('${archive.seasonName}')">Удалить весь архив за ${archive.seasonName} г.</button>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function editArchivedSale(seasonName, saleId) {
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(!season) return;
+  const item = season.salesEntries.find(x => x.id === saleId);
+  if(!item) return;
+
+  const newRev = prompt('Архив: Изменить сумму выручки (₽):', item.revenue);
+  if(newRev === null) return;
+  const newSm = prompt('Архив: Изменить мал. магниты:', item.small);
+  const newBg = prompt('Архив: Изменить бол. магниты:', item.big);
+
+  item.revenue = parseFloat(newRev) || 0;
+  item.small = parseInt(newSm) || 0;
+  item.big = parseInt(newBg) || 0;
+
+  saveData();
+  toast('Прошлогодний отчет обновлен');
+}
+
+function deleteArchivedSale(seasonName, saleId) {
+  if(!confirm('Удалить эту запись из архива прошлых лет?')) return;
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(season) {
+    season.salesEntries = season.salesEntries.filter(x => x.id !== saleId);
+    saveData();
+  }
+}
+
+function deleteArchivedPurchase(seasonName, purchaseId) {
+  if(!confirm('Удалить эту закупку из архива прошлых лет?')) return;
+  const season = state.archivedSeasons.find(s => s.seasonName === seasonName);
+  if(season) {
+    season.purchaseEntries = season.purchaseEntries.filter(x => x.id !== purchaseId);
+    saveData();
+  }
+}
+
+function deleteEntireArchivedSeason(seasonName) {
+  const masterInput = prompt(`Внимание! Введите Мастер-пароль для удаления ВСЕГО архива за ${seasonName} год:`);
+  if(masterInput !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  state.archivedSeasons = state.archivedSeasons.filter(s => s.seasonName !== seasonName);
+  saveData();
+  toast(`Архив за ${seasonName} удален`);
+}
+
+/* ВЛАДЕЛЕЦ - УПРАВЛЕНИЕ СЕЗОНАМИ И СБРОС */
+function renderOwnerSeasonsControlTab() {
+  return `
+  <div class="panel" style="border-color:var(--brass);">
+    <h3>Завершение текущего сезона (${state.currentSeason})</h3>
+    <p style="font-size:12px; color:var(--ink-soft);">
+      Нажмите эту кнопку в конце года/сезона. Текущие отчеты о продажах и закупках сохранятся в <b>«Архив сезонов»</b>.
+      Кассы точек и остатки обнулятся, и вы сможете начать новый сезон с чистого листа.
+    </p>
+    <div class="field">
+      <label class="field-label">Название следующего сезона / года</label>
+      <input type="text" id="nextSeasonName" value="${parseInt(state.currentSeason)+1 || '2027'}" oninput="formBuffer['nextSeasonName']=this.value">
+    </div>
+    <button class="btn gold" onclick="finishCurrentSeason()">Завершить сезон и перенести отчеты в Архив</button>
+  </div>
+
+  <div class="panel" style="border-color:var(--red); margin-top:24px;">
+    <h3 style="color:var(--red);">Сброс Данных (Требуется Мастер-пароль)</h3>
+    <p style="font-size:11px; color:var(--ink-soft); margin-bottom:16px;">По умолчанию Мастер-пароль: <b>12345</b> (можно сменить в Профиле)</p>
+
+    <div style="margin-bottom:16px; padding:12px; background:var(--bg-2); border-radius:var(--radius-sm);">
+      <h4 style="margin:0 0 6px 0;">1. Сбросить отчеты за ТЕКУЩИЙ ГОД (${state.currentSeason})</h4>
+      <p style="font-size:11px; color:var(--ink-soft);">Удалит все текущие продажи, закупки и обнулит кассы. Сотрудники и Прошлые Года в Архиве НЕ удалятся.</p>
+      <button class="btn red" onclick="resetCurrentYearData()">Сбросить данные текущего года</button>
+    </div>
+
+    <div style="padding:12px; background:var(--bg-2); border-radius:var(--radius-sm); border:1px solid var(--red);">
+      <h4 style="margin:0 0 6px 0; color:var(--red);">2. ПОЛНЫЙ СБРОС ВСЕГО (За всё время)</h4>
+      <p style="font-size:11px; color:var(--ink-soft);">Полностью стирает ВСЕ продажи, закупки, фото, архив сезонов и сотрудников (останется только аккаунт Owner).</p>
+      <button class="btn red" onclick="resetEverythingData()">Сбросить ВСЁ за все время</button>
+    </div>
+  </div>`;
+}
+
+function finishCurrentSeason() {
+  const nextSeason = document.getElementById('nextSeasonName').value.trim();
+  if(!nextSeason) return toast('Введите название нового сезона', true);
+
+  if(!confirm(`Завершить текущий сезон (${state.currentSeason}) и начать Новый Сезон (${nextSeason})?`)) return;
+
+  state.archivedSeasons.unshift({
+    seasonName: state.currentSeason,
+    salesEntries: [...state.salesEntries],
+    purchaseEntries: [...state.purchaseEntries]
+  });
+
+  state.salesEntries = [];
+  state.purchaseEntries = [];
+  state.payoutRequests = [];
+  state.points.forEach(p => { p.revenue = 0; p.small = 0; p.big = 0; });
+  state.users.forEach(u => u.salaryBalance = 0);
+  state.currentSeason = nextSeason;
+
+  saveData();
+  toast(`Сезон ${nextSeason} успешно начат!`);
+}
+
+function resetCurrentYearData() {
+  const pass = prompt(`ВНИМАНИЕ! Для сброса данных за ${state.currentSeason} год введите Мастер-пароль:`);
+  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  state.salesEntries = [];
+  state.purchaseEntries = [];
+  state.payoutRequests = [];
+  state.points.forEach(p => { p.revenue = 0; });
+  state.users.forEach(u => u.salaryBalance = 0);
+
+  saveData();
+  toast(`Отчеты за ${state.currentSeason} год сброшены`);
+}
+
+function resetEverythingData() {
+  const pass = prompt('ОПАСНО! Это действие полностью очистит базу за все годы!\nВведите Мастер-пароль:');
+  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+
+  const curPass = state.masterPassword;
+  state = defaultState();
+  state.masterPassword = curPass;
+
+  saveData();
+  toast('Выполнен полный сброс системы');
+}
+
+/* ВЛАДЕЛЕЦ - БАЗА ФОТО И ЗАЯВКИ КЛИЕНТОВ */
+function renderOwnerPhotosTab() {
+  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
+  const currentFilter = session.ownerRequestFilter || 'all';
+  const pendingRequests = state.customerRequests ? state.customerRequests.filter(r => r.status === 'pending') : [];
   
-  saveSession();
-  render();
+  const filteredRequests = pendingRequests.filter(r => {
+    if (currentFilter === 'all') return true;
+    return r.pointId === currentFilter;
+  });
+
+  return `
+  <div class="panel">
+    <h3>Заявки Клиентов (${pendingRequests.length})</h3>
+    
+    <div class="field">
+      <label class="field-label">Фильтр по точке:</label>
+      <select onchange="session.ownerRequestFilter = this.value; saveSession(); render();">
+        <option value="all" ${currentFilter === 'all' ? 'selected' : ''}>🌐 Все точки</option>
+        ${state.points.map(pt => `<option value="${pt.id}" ${currentFilter === pt.id ? 'selected' : ''}>📍 ${pt.name}</option>`).join('')}
+      </select>
+    </div>
+
+    ${!filteredRequests.length ? '<p style="font-size:12px; color:var(--ink-soft); margin-top:12px;">Заявок по выбранному фильтру нет</p>' :
+      filteredRequests.map(r => {
+        const pt = state.points.find(x => x.id === r.pointId);
+        return `
+        <div style="background:var(--bg-2); border:1px solid var(--brass); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px;">
+          <div style="font-size:13px; margin-bottom:4px;">
+            <b>Точка:</b> <span style="color:var(--brass);">${pt ? pt.name : 'Не указана'}</span> | 
+            <b>Имя:</b> ${r.name} | <b>Тел:</b> ${r.phone}
+          </div>
+          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Время: ${r.date}</div>
+          <img src="${r.magnetUrl}" style="width:100%; max-height:200px; object-fit:cover; border-radius:var(--radius-sm); margin-bottom:8px; cursor:pointer;" onclick="openLightbox('${r.magnetUrl}')" title="Кликните для увеличения">
+          <div style="display:flex; gap:8px;">
+            <button class="btn small gold" style="flex:1;" onclick="fillUploadCodeFromRequest('${r.id}')">Принять (Присвоить номер)</button>
+            <button class="btn small red" style="flex:1;" onclick="rejectCustomerRequest('${r.id}')">Отклонить заявку</button>
+          </div>
+        </div>`;
+      }).join('')}
+  </div>
+
+  <div class="panel">
+    <h3>Опубликовать фото для клиента</h3>
+    <div class="field">
+      <label class="field-label">Выберите точку</label>
+      <select id="ownerUploadPoint" onchange="formBuffer['ownerUploadPoint']=this.value">
+        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field"><label class="field-label">Код заказа</label><input type="text" id="ownerUploadCode" placeholder="например 1024" oninput="formBuffer['ownerUploadCode']=this.value"></div>
+    <div class="field"><label class="field-label">Файлы фотографий</label><input type="file" id="ownerUploadFile" accept="image/*" multiple></div>
+    <button class="btn blue" onclick="uploadOwnerPhoto()">Загрузить и опубликовать</button>
+    ${generatedClientText ? `
+      <div class="copy-box">
+        <div style="font-size:11px; color:var(--brass); margin-bottom:4px; font-weight:600;">Текст для клиента:</div>
+        <div id="textToCopy" style="font-size:13px; white-space:pre-wrap;">${generatedClientText}</div>
+        <button class="btn small gold" style="margin-top:8px;" onclick="copyClientText()">Скопировать текст</button>
+      </div>
+    ` : ''}
+  </div>
+
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0;">База загруженных фото (${state.digitalPhotos.length})</h3>
+      ${downloadedCount > 0 ? `<button class="btn small red" onclick="deleteDownloadedPhotos()">Удалить все скачанные (${downloadedCount})</button>` : ''}
+    </div>
+    ${!state.digitalPhotos.length ? '<p style="font-size:12px; color:var(--ink-soft);">Файлы отсутствуют</p>' :
+      state.digitalPhotos.map(p => {
+        const pt = state.points.find(x => x.id === p.pointId);
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:8px 0;">
+          <div>
+            <b>Код: ${p.code}</b> <span style="font-size:11px; color:var(--ink-soft);">(${pt ? pt.name : 'Точка'})</span>
+            <div style="font-size:11px; color:${p.downloaded ? 'var(--green)' : 'var(--brass)'};">
+              ${p.downloaded ? 'Скачано' : 'Ожидает'} | Загрузил: ${p.uploadedBy}
+            </div>
+          </div>
+          <button class="btn small red" onclick="deleteDigitalPhoto('${p.id}')">Удалить</button>
+        </div>`;
+      }).join('')}
+  </div>`;
+}
+
+function uploadOwnerPhoto() {
+  const pointId = document.getElementById('ownerUploadPoint').value;
+  uploadDigitalPhoto(pointId, 'ownerUploadCode', 'ownerUploadFile');
+}
+
+function deleteDigitalPhoto(id) {
+  state.digitalPhotos = state.digitalPhotos.filter(p => p.code !== id && p.id !== id);
+  saveData();
+  toast('Фото удалено');
+}
+
+function deleteDownloadedPhotos() {
+  const downloadedCount = state.digitalPhotos.filter(p => p.downloaded).length;
+  if (!downloadedCount) return toast('Нет скачанных фото для удаления', true);
+
+  if (confirm(`Удалить все скачанные фотографии (${downloadedCount} шт.) из базы?`)) {
+    state.digitalPhotos = state.digitalPhotos.filter(p => !p.downloaded);
+    saveData();
+    toast(`Удалено скачанных фото: ${downloadedCount}`);
+  }
+}
+
+function deleteMyDownloadedPhotos() {
+  const user = currentUser();
+  if(!user) return;
+  
+  const myDownloaded = state.digitalPhotos.filter(p => p.uploadedBy === user.username && p.downloaded);
+  if (!myDownloaded.length) return toast('У вас нет скачанных фото для удаления', true);
+
+  if (confirm(`Удалить все ваши скачанные фотографии (${myDownloaded.length} шт.)?`)) {
+    state.digitalPhotos = state.digitalPhotos.filter(p => !(p.uploadedBy === user.username && p.downloaded));
+    saveData();
+    toast(`Удалено ваших скачанных фото: ${myDownloaded.length}`);
+  }
 }
 
 function logout() {
   session.userId = null;
   session.currentTab = 'download_public';
+  session.userSubTab = 'main';
   saveSession();
   render();
 }
-
-// ==========================================
-// 3. ОБЩИЙ МОДУЛЬ ЧАТА ВНУТРИ ПАНЕЛЕЙ
-// ==========================================
-function renderChatModule(currentUser) {
-  const activeTarget = session.activeChatTarget || 'all';
-  
-  let availableDialogs = [{ id: 'all', name: 'Общий чат' }];
-  if (currentUser.role === 'owner') {
-    state.users.filter(u => u.id !== currentUser.id).forEach(u => {
-      availableDialogs.push({ id: u.id, name: `${u.username} (${u.role === 'employee' ? 'Продавец' : 'Закупщик'})` });
-    });
-  } else {
-    const owner = state.users.find(u => u.role === 'owner');
-    if (owner) {
-      availableDialogs.push({ id: owner.id, name: 'Владелец (Личные)' });
-    }
-  }
-
-  const filteredMessages = state.chatMessages.filter(m => {
-    if (activeTarget === 'all') return m.targetId === 'all';
-    return (m.senderId === currentUser.id && m.targetId === activeTarget) ||
-           (m.senderId === activeTarget && m.targetId === currentUser.id);
-  });
-
-  return `
-    <div class="panel">
-      <h2>Сообщения и Чат</h2>
-      <div class="messenger-layout">
-        <div class="chat-sidebar">
-          ${availableDialogs.map(d => {
-            const unread = getUnreadCountForDialog(currentUser, d.id);
-            return `
-              <div class="dialog-item ${activeTarget === d.id ? 'active' : ''}" onclick="session.activeChatTarget='${d.id}'; saveSession(); render();">
-                <span>${d.name}</span>
-                ${unread > 0 ? `<span class="dialog-badge">+${unread}</span>` : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
-        <div class="chat-main">
-          <div class="chat-header">
-            ${availableDialogs.find(d => d.id === activeTarget)?.name || 'Чат'}
-          </div>
-          <div class="chat-box" id="chatBox">
-            ${filteredMessages.length === 0 ? `<div style="text-align:center; color:var(--ink-soft); font-size:12px; margin-top:20px;">Нет сообщений</div>` : ''}
-            ${filteredMessages.map(m => {
-              const isMine = m.senderId === currentUser.id;
-              return `
-                <div class="chat-msg ${isMine ? 'mine' : ''}">
-                  <div class="chat-msg-header">
-                    <span>${m.senderName}</span>
-                    <span>${m.date}</span>
-                  </div>
-                  <div class="chat-msg-body">${m.text}</div>
-                  ${m.photoUrl ? `<img src="${m.photoUrl}" style="max-width:100%; border-radius:6px; cursor:pointer;" onclick="openLightbox('${m.photoUrl}')">` : ''}
-                </div>
-              `;
-            }).join('')}
-          </div>
-          <div style="padding:10px; background:var(--surface); border-top:1px solid var(--line); display:flex; gap:8px; align-items:center;">
-            <input type="text" id="chatInputText" placeholder="Напишите сообщение..." style="flex:1; margin:0;" onkeydown="if(event.key==='Enter') sendChatMessage('${currentUser.id}', '${currentUser.username}')">
-            <label class="btn outline small" style="margin:0; width:auto; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-              📷 <input type="file" id="chatInputFile" accept="image/*" style="display:none;" onchange="sendChatMessage('${currentUser.id}', '${currentUser.username}')">
-            </label>
-            <button class="btn gold small" style="margin:0;" onclick="sendChatMessage('${currentUser.id}', '${currentUser.username}')">Отправить</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-async function sendChatMessage(senderId, senderName) {
-  const textInput = document.getElementById('chatInputText');
-  const fileInput = document.getElementById('chatInputFile');
-  const text = textInput ? textInput.value.trim() : '';
-  const file = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
-
-  if (!text && !file) return;
-
-  const targetId = session.activeChatTarget || 'all';
-  let photoUrl = '';
-
-  if (file) {
-    toast('Загрузка картинки...');
-    const formData = new FormData();
-    formData.append('image', file);
-    try {
-      const res = await fetch(`[https://api.imgbb.com/1/upload?key=$](https://api.imgbb.com/1/upload?key=$){IMGBB_API_KEY}`, { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.success) photoUrl = data.data.url;
-    } catch(e) {
-      toast('Ошибка загрузки фото в чат', true);
-      return;
-    }
-  }
-
-  state.chatMessages.push({
-    id: uid(),
-    senderId,
-    senderName,
-    targetId,
-    text,
-    photoUrl,
-    date: nowFormatted(),
-    readBy: [senderId]
-  });
-
-  if (textInput) textInput.value = '';
-  if (fileInput) fileInput.value = '';
-
-  saveData();
-  render();
-  setTimeout(() => {
-    const box = document.getElementById('chatBox');
-    if (box) box.scrollTop = box.scrollHeight;
-  }, 100);
-}
-
-// ==========================================
-// 4. ВЛАДЕЛЕЦ (OWNER DASHBOARD)
-// ==========================================
-function renderOwnerDashboard(user) {
-  const ownerSubTab = session.ownerSubTab || 'overview';
-  const totalRev = state.points.reduce((a, b) => a + b.revenue, 0);
-  const totalSalariesToPay = state.users.reduce((a, b) => a + (b.salaryBalance || 0), 0);
-  const totalPurchases = state.purchaseEntries.reduce((a, b) => a + b.amount, 0);
-  const netProfit = totalRev - totalSalariesToPay - totalPurchases;
-
-  const unreadChatCount = getUnreadChatCount(user.id);
-  if (ownerSubTab === 'chat') {
-    markMessagesAsRead(user.id, session.activeChatTarget || 'all');
-  }
-
-  const activeCustomerRequests = state.customerRequests.filter(r => r.status === 'pending');
-
-  return `
-    <div class="topbar">
-      <div>
-        <div style="font-size:16px; font-weight:600;">Панель Управления Владельца</div>
-        <div class="role-chip">Сезон ${state.currentSeason}</div>
-      </div>
-      <button class="btn red small" onclick="logout()">Выход</button>
-    </div>
-
-    <div class="nav-tabs">
-      <button class="tab-btn ${ownerSubTab === 'overview' ? 'active' : ''}" onclick="switchOwnerSubTab('overview')">Обзор & Статистика</button>
-      <button class="tab-btn ${ownerSubTab === 'points' ? 'active' : ''}" onclick="switchOwnerSubTab('points')">Точки</button>
-      <button class="tab-btn ${ownerSubTab === 'employees' ? 'active' :
+</script>
+</body>
+</html>
