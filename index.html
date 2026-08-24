@@ -1,4 +1,4 @@
-[source: 17]<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
@@ -216,6 +216,61 @@ function restoreFormInputs() {
   });
 }
 
+function renderChatBoxOnly() {
+  const chatBox = document.getElementById('chatBox');
+  if (!chatBox) return false;
+
+  const user = currentUser();
+  if (!user) return false;
+
+  const targetId = session.activeChatTarget || 'all';
+  markMessagesAsRead(user.id, targetId);
+
+  const visibleMessages = state.chatMessages.filter(m => {
+    if (targetId === 'all') return m.targetId === 'all';
+    return (m.senderId === user.id && m.targetId === targetId) ||
+           (m.senderId === targetId && m.targetId === user.id);
+  });
+
+  const isAtBottom = chatBox.scrollHeight - chatBox.scrollTop <= chatBox.clientHeight + 50;
+
+  chatBox.innerHTML = !visibleMessages.length ? '<p style="font-size:12px; color:var(--ink-soft); text-align:center; margin:auto;">Сообщений пока нет</p>' :
+    visibleMessages.map(m => {
+      const isMine = m.senderId === user.id;
+      const isOwner = user.role === 'owner';
+      const canDelete = isMine || isOwner;
+
+      return `
+      <div class="chat-msg ${isMine ? 'mine' : ''}">
+        <div class="chat-msg-header">
+          <b>${m.senderName}</b>
+          <span>${m.time}</span>
+        </div>
+        <div class="chat-msg-body">${m.text}</div>
+        ${canDelete ? `<button class="btn small red" style="padding:2px 6px; font-size:10px; width:auto;" onclick="deleteChatMessage('${m.id}')">Удалить</button>` : ''}
+      </div>
+      `;
+    }).join('');
+
+  if (isAtBottom) {
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  // Обновляем счетчики непрочитанных сообщений в сайдбаре и кнопках
+  const unreadCount = getUnreadChatCount(user.id);
+  const badges = document.querySelectorAll('.badge');
+  badges.forEach(b => {
+    if (unreadCount > 0) {
+      b.textContent = unreadCount;
+      b.style.display = 'inline-block';
+    } else {
+      b.style.display = 'none';
+    }
+  });
+
+  return true;
+}
+
 dbRef.on('value', (snapshot) => {
   const data = snapshot.val();
   
@@ -245,6 +300,14 @@ dbRef.on('value', (snapshot) => {
 
   if (isUploading) return; 
 
+  // Если изменился только чат и инпут чата активен или мы находимся на странице чата — обновляем только чат
+  if (chatChanged) {
+    const updatedChatOnly = renderChatBoxOnly();
+    if (updatedChatOnly) {
+      return; 
+    }
+  }
+
   const activeElement = document.activeElement;
   const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
 
@@ -259,7 +322,8 @@ dbRef.on('value', (snapshot) => {
   const custPhone = document.getElementById('custPhone');
   const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
 
-  if (chatChanged || (!isTyping && !hasFiles && !hasUnsavedClientData)) {
+  // Не обновляем глобальный интерфейс, если пользователь вводит данные или выбрал файлы в input file
+  if (!isTyping && !hasFiles && !hasUnsavedClientData) {
     render();
   }
 });
@@ -438,6 +502,7 @@ async function submitCustomerRequest() {
   if(!pointId) return toast('Выберите точку, где делали покупку', true);
   if(!name || !phone || !file) return toast('Заполните имя, телефон и выберите фото магнита', true);
 
+  isUploading = true;
   toast('Загрузка снимка...');
 
   const formData = new FormData();
@@ -469,15 +534,18 @@ async function submitCustomerRequest() {
       if (phoneInput) phoneInput.value = '';
       if (fileInput) fileInput.value = '';
 
+      isUploading = false;
       saveData();
       alert('Заявка успешно отправлена! Продавец этой точки уже обрабатывает её.');
       session.publicMode = 'download';
       saveSession();
       render();
     } else {
+      isUploading = false;
       toast('Ошибка загрузки фото', true);
     }
   } catch(e) {
+    isUploading = false;
     toast('Ошибка сети при загрузке', true);
   }
 }
