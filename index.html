@@ -88,6 +88,15 @@
   #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:var(--radius-sm); font-size:13px; font-family:'IBM Plex Mono', monospace; z-index:100; opacity:0; pointer-events:none; transition:opacity .2s; }
   #toast.show { opacity:1; }
   #toast.err { background:var(--red); color:#fff; }
+
+  #updateBanner {
+    position:fixed; top:0; left:50%; transform:translateX(-50%) translateY(-120%);
+    max-width:1000px; width:100%; z-index:200; cursor:pointer;
+    background:var(--brass); color:#100F0D; font-size:13px; font-weight:600;
+    padding:11px 16px; text-align:center; box-shadow:0 6px 18px -6px rgba(0,0,0,0.5);
+    transition:transform .25s ease; border-bottom-left-radius:var(--radius-sm); border-bottom-right-radius:var(--radius-sm);
+  }
+  #updateBanner.show { transform:translateX(-50%) translateY(0); }
 </style>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -97,6 +106,7 @@
 
 <div id="root"></div>
 <div id="toast"></div>
+<div id="updateBanner" onclick="applyPendingUpdate()">Появились новые данные — нажмите, чтобы обновить экран</div>
 
 <!-- Lightbox Modal -->
 <div id="lightboxModal" class="lightbox-modal" onclick="closeLightbox()">
@@ -271,14 +281,25 @@ function renderChatBoxOnly() {
   return true;
 }
 
+// ==========================================
+// Живая синхронизация: данные в фоне ВСЕГДА свежие,
+// но экран пользователя сам по себе никогда не перерисовывается
+// без его участия — это защищает набираемый текст, выбранное
+// фото и код заказа от сброса при чужих действиях на других
+// устройствах. Пользователь либо продолжает работать со старой
+// картинкой, либо сам нажимает баннер "обновить", когда ему удобно.
+// ==========================================
+let hasPendingUpdate = false;
+
 dbRef.on('value', (snapshot) => {
   const data = snapshot.val();
-  
+
   if (data && JSON.stringify(state) === JSON.stringify(data)) {
     return;
   }
 
   const chatChanged = data && JSON.stringify(state.chatMessages) !== JSON.stringify(data.chatMessages);
+  const onlyChatChanged = data && chatChanged && JSON.stringify({...state, chatMessages: []}) === JSON.stringify({...data, chatMessages: []});
 
   if (data) {
     state = data;
@@ -296,37 +317,36 @@ dbRef.on('value', (snapshot) => {
   } else {
     state = defaultState();
     saveData();
+    return;
   }
 
-  if (isUploading) return; 
-
-  // Если изменился только чат и инпут чата активен или мы находимся на странице чата — обновляем только чат
+  // Сообщения чата обновляем вживую — это не мешает никаким полям ввода,
+  // так как трогает только список сообщений внутри чата.
   if (chatChanged) {
-    const updatedChatOnly = renderChatBoxOnly();
-    if (updatedChatOnly) {
-      return; 
-    }
+    renderChatBoxOnly();
   }
 
-  const activeElement = document.activeElement;
-  const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
-
-  const custFile = document.getElementById('custMagnetFile');
-  const empFile = document.getElementById('uploadFile');
-  const ownerFile = document.getElementById('ownerUploadFile');
-  const hasFiles = (custFile && custFile.files.length > 0) || 
-                   (empFile && empFile.files.length > 0) || 
-                   (ownerFile && ownerFile.files.length > 0);
-
-  const custName = document.getElementById('custName');
-  const custPhone = document.getElementById('custPhone');
-  const hasUnsavedClientData = (custName && custName.value.trim().length > 0) || (custPhone && custPhone.value.trim().length > 0);
-
-  // Не обновляем глобальный интерфейс, если пользователь вводит данные или выбрал файлы в input file
-  if (!isTyping && !hasFiles && !hasUnsavedClientData) {
-    render();
+  // Если поменялись не только сообщения чата — не трогаем экран сами.
+  // Данные (state) уже свежие и будут использованы, как только пользователь
+  // сам что-то сделает (переключит вкладку, нажмёт кнопку, отправит форму).
+  // До этого момента просто мягко сообщаем, что есть новые данные.
+  if (!onlyChatChanged) {
+    showUpdateBanner();
   }
 });
+
+function showUpdateBanner() {
+  hasPendingUpdate = true;
+  const el = document.getElementById('updateBanner');
+  if (el) el.classList.add('show');
+}
+
+function applyPendingUpdate() {
+  hasPendingUpdate = false;
+  const el = document.getElementById('updateBanner');
+  if (el) el.classList.remove('show');
+  render();
+}
 
 function saveData() {
   dbRef.set(state).catch(err => {
@@ -405,6 +425,10 @@ function logout() {
 }
 
 function render() {
+  hasPendingUpdate = false;
+  const bannerEl = document.getElementById('updateBanner');
+  if (bannerEl) bannerEl.classList.remove('show');
+
   preserveFormInputs();
   const scrollPos = window.scrollY;
   const root = document.getElementById('root');
