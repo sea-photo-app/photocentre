@@ -156,8 +156,8 @@ let state = defaultState();
 let currentSearchResultHtml = ''; 
 let currentSearchedCode = '';
 let generatedClientText = '';
-let isUploading = false; // Флаг процесса загрузки фото
-let expandedGroupCodes = {}; // Развернутые группы кодов заказов
+let isUploading = false; 
+let expandedGroupCodes = {};
 
 let formBuffer = {};
 
@@ -172,8 +172,75 @@ let session = savedSession || {
   ownerRequestFilter: 'all'
 };
 
+// ------------------------------------------
+// ЛОГИКА МАРШРУТИЗАЦИИ (URL ROUTING)
+// ------------------------------------------
+function updateURL() {
+  const urlParams = new URLSearchParams();
+  
+  if (session.currentTab === 'download_public') {
+    urlParams.set('page', session.publicMode || 'download');
+    if (currentSearchedCode) urlParams.set('code', currentSearchedCode);
+  } else if (session.currentTab === 'login') {
+    urlParams.set('page', 'login');
+  } else {
+    const user = currentUser();
+    if (user) {
+      if (user.role === 'owner') {
+        urlParams.set('page', session.ownerSubTab || 'overview');
+      } else {
+        urlParams.set('page', session.userSubTab || 'main');
+      }
+    }
+  }
+
+  const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+  if (window.location.search !== `?${urlParams.toString()}`) {
+    window.history.pushState(null, '', newUrl);
+  }
+}
+
+function parseURLAndSetSession() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const page = urlParams.get('page');
+  const code = urlParams.get('code');
+
+  if (code) {
+    currentSearchedCode = code;
+  }
+
+  if (!page || page === 'download') {
+    session.currentTab = 'download_public';
+    session.publicMode = 'download';
+  } else if (page === 'request') {
+    session.currentTab = 'download_public';
+    session.publicMode = 'request';
+  } else if (page === 'login') {
+    session.currentTab = 'login';
+  } else {
+    const user = currentUser();
+    if (user) {
+      session.currentTab = 'main';
+      if (user.role === 'owner') {
+        session.ownerSubTab = page;
+      } else {
+        session.userSubTab = page;
+      }
+    } else {
+      session.currentTab = 'download_public';
+      session.publicMode = 'download';
+    }
+  }
+}
+
+window.onpopstate = () => {
+  parseURLAndSetSession();
+  render();
+};
+
 function saveSession() {
   localStorage.setItem('app_session', JSON.stringify(session));
+  updateURL();
 }
 
 function toast(msg, isErr) {
@@ -243,7 +310,7 @@ dbRef.on('value', (snapshot) => {
     saveData();
   }
 
-  if (isUploading) return; // Не перерисовываем интерфейс во время процесса загрузки фото
+  if (isUploading) return; 
 
   const activeElement = document.activeElement;
   const isTyping = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
@@ -334,6 +401,14 @@ function toggleGroupExpand(code) {
   render();
 }
 
+function logout() {
+  session.userId = null;
+  session.currentTab = 'download_public';
+  session.publicMode = 'download';
+  saveSession();
+  render();
+}
+
 function render() {
   preserveFormInputs();
   const scrollPos = window.scrollY;
@@ -343,11 +418,14 @@ function render() {
   if (session.currentTab === 'download_public') {
     root.innerHTML = renderPublicDownloadPage();
     restoreFormInputs();
+    if (currentSearchedCode && session.publicMode === 'download' && !currentSearchResultHtml) {
+      searchPhotoByCode();
+    }
     window.scrollTo(0, scrollPos);
     return;
   }
 
-  if (!user) {
+  if (!user || session.currentTab === 'login') {
     root.innerHTML = renderAuthPage();
     restoreFormInputs();
     window.scrollTo(0, scrollPos);
@@ -489,11 +567,12 @@ function rejectCustomerRequest(requestId) {
 
 function searchPhotoByCode() {
   const codeInput = document.getElementById('photoCodeInput');
-  const code = codeInput ? codeInput.value.trim() : '';
+  const code = codeInput ? codeInput.value.trim() : currentSearchedCode;
   const res = document.getElementById('photoSearchResult');
   if(!code) return toast('Введите код', true);
 
   currentSearchedCode = code;
+  updateURL();
 
   const photos = state.digitalPhotos.filter(p => p.code === code);
   if(!photos.length) {
@@ -573,6 +652,7 @@ function handleLogin() {
   session.userId = user.id;
   session.currentTab = 'main';
   session.userSubTab = 'main';
+  session.ownerSubTab = 'overview';
   saveSession();
   render();
 }
@@ -793,7 +873,7 @@ function groupPhotosByCode(photos) {
 function renderGroupedPhotoList(groupedPhotos, isOwnerView = false) {
   if (!groupedPhotos.length) return '<p style="font-size:12px; color:var(--ink-soft);">Список загруженных фото пуст</p>';
 
-  const siteUrl = window.location.href.split('?')[0];
+  const baseUrl = window.location.origin + window.location.pathname;
 
   return groupedPhotos.map(group => {
     const isExpanded = !!expandedGroupCodes[group.code];
@@ -801,7 +881,8 @@ function renderGroupedPhotoList(groupedPhotos, isOwnerView = false) {
     const isAllDownloaded = downloadedCount === group.items.length && group.items.length > 0;
     const pt = state.points.find(x => x.id === group.pointId);
 
-    const clientMsgText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${group.code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${group.code}`;
+    const directLink = `${baseUrl}?page=download&code=${group.code}`;
+    const clientMsgText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${group.code}\nПерейдите по прямой ссылке для скачивания:\n${directLink}`;
 
     return `
       <div style="background:var(--bg-2); border:1px solid var(--line-strong); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
@@ -1094,7 +1175,7 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
     return;
   }
 
-  isUploading = true; // Устанавливаем флаг загрузки
+  isUploading = true; 
   toast(`Загрузка ${files.length} фото на ImgBB...`);
 
   let loadedCount = 0;
@@ -1133,19 +1214,20 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
     }
   }
 
-  isUploading = false; // Снимаем флаг загрузки
+  isUploading = false; 
 
   if (loadedCount > 0) {
-    const siteUrl = window.location.href.split('?')[0];
+    const baseUrl = window.location.origin + window.location.pathname;
+    const directLink = `${baseUrl}?page=download&code=${code}`;
 
     if (activeReq) {
-      generatedClientText = `Здравствуйте, ${activeReq.name}! Ваш заказ готов 🎉\n\nНомер вашего заказа: ${code}\nДля скачивания перейдите на сайт:\n${siteUrl}\nВыберите «Скачать фото» и введите ваш код заказа: ${code}`;
+      generatedClientText = `Здравствуйте, ${activeReq.name}! Ваш заказ готов 🎉\n\nНомер вашего заказа: ${code}\nДля скачивания перейдите по ссылке:\n${directLink}`;
       
       const reqInState = state.customerRequests.find(r => r.id === activeReq.id);
       if(reqInState) reqInState.status = 'completed';
       session.activeCustomerRequest = null;
     } else {
-      generatedClientText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${code}\nПерейдите на сайт для скачивания:\n${siteUrl}\nИ введите код заказа: ${code}`;
+      generatedClientText = `Здравствуйте! Ваши фотографии готовы 🎉\n\nНомер вашего заказа: ${code}\nПерейдите по ссылке для скачивания:\n${directLink}`;
     }
 
     delete formBuffer[codeInputId];
@@ -1292,6 +1374,56 @@ function renderOwnerDashboard(user) {
   </div>`;
 }
 
+function renderOwnerPhotosTab() {
+  const groupedPhotos = groupPhotosByCode(state.digitalPhotos);
+  const pendingRequests = state.customerRequests ? state.customerRequests.filter(r => r.status === 'pending') : [];
+
+  return `
+    <div class="panel">
+      <h3>Заявки от покупателей (${pendingRequests.length})</h3>
+      ${!pendingRequests.length ? '<p style="font-size:12px; color:var(--ink-soft);">Нет активных заявок</p>' :
+        pendingRequests.map(r => {
+          const pt = state.points.find(x => x.id === r.pointId);
+          return `
+            <div style="background:var(--bg-2); border:1px solid var(--brass); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px;">
+              <div style="font-size:13px; margin-bottom:4px;"><b>Имя:</b> ${r.name} | <b>Тел:</b> ${r.phone} (${pt ? pt.name : 'Точка'})</div>
+              <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Время: ${r.date}</div>
+              <img src="${r.magnetUrl}" style="width:100%; max-height:200px; object-fit:cover; border-radius:var(--radius-sm); margin-bottom:8px; cursor:pointer;" onclick="openLightbox('${r.magnetUrl}')">
+              <div style="display:flex; gap:8px;">
+                <button class="btn small gold" style="flex:1;" onclick="fillUploadCodeFromRequest('${r.id}')">Присвоить номер этой заявке</button>
+                <button class="btn small red" style="flex:1;" onclick="rejectCustomerRequest('${r.id}')">Отклонить заявку</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+    </div>
+
+    <div class="panel">
+      <h3>Загрузить фото (как Владелец)</h3>
+      <div class="field">
+        <label class="field-label">Точка</label>
+        <select id="ownerUploadPoint" onchange="formBuffer['ownerUploadPoint']=this.value">
+          ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Код заказа</label>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="ownerUploadCode" placeholder="например 1024" oninput="formBuffer['ownerUploadCode']=this.value">
+          <button class="btn small gold" style="width:130px; margin:0;" onclick="generateRandomCode('ownerUploadCode')">🎲 Рандомный номер</button>
+        </div>
+      </div>
+      <div class="field"><label class="field-label">Выбрать фото</label><input type="file" id="ownerUploadFile" accept="image/*" multiple></div>
+      <button class="btn blue" onclick="uploadDigitalPhoto(document.getElementById('ownerUploadPoint').value, 'ownerUploadCode', 'ownerUploadFile')">Загрузить фото</button>
+    </div>
+
+    <div class="panel">
+      <h3>Все заказы в базе (${groupedPhotos.length})</h3>
+      ${renderGroupedPhotoList(groupedPhotos, true)}
+    </div>
+  `;
+}
+
 function renderOwnerOverviewTab() {
   const totalRev = state.points.reduce((s, p) => s + p.revenue, 0);
   const totalPurchases = state.purchaseEntries.reduce((s, p) => s + p.cost, 0);
@@ -1311,7 +1443,7 @@ function renderOwnerOverviewTab() {
         <div>
           <b>${p.name}</b>
           <div style="font-size:12px; color:var(--ink-soft);">
-            Остаток: ${p.small} мал. ${p.small<=10?'':''} / ${p.big} бол. ${p.big<=10?'':''}
+            Остаток: ${p.small} мал. / ${p.big} бол.
           </div>
         </div>
         <div style="font-family:'IBM Plex Mono'; font-weight:600; color:var(--green);">${money(p.revenue)}</div>
@@ -1816,106 +1948,25 @@ function resetCurrentYearData() {
   state.salesEntries = [];
   state.purchaseEntries = [];
   state.payoutRequests = [];
-  state.points.forEach(p => { p.revenue = 0; });
+  state.points.forEach(p => { p.revenue = 0; p.small = 0; p.big = 0; });
   state.users.forEach(u => u.salaryBalance = 0);
 
   saveData();
-  toast(`Отчеты за ${state.currentSeason} год сброшены`);
+  toast(`Данные за ${state.currentSeason} год сброшены!`);
 }
 
 function resetEverythingData() {
-  const pass = prompt('ОПАСНО! Это действие полностью очистит базу за все годы!\nВведите Мастер-пароль:');
+  const pass = prompt(`ОПАСНОСТЬ! Для ПОЛНОГО ОБНУЛЕНИЯ ВСЕЙ БАЗЫ ДАННЫХ введите Мастер-пароль:`);
   if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
 
-  const curPass = state.masterPassword;
   state = defaultState();
-  state.masterPassword = curPass;
-
   saveData();
-  toast('Выполнен полный сброс системы');
+  toast('Все данные приложения полностью сброшены!');
 }
 
-/* ВЛАДЕЛЕЦ - БАЗА ФОТО И ЗАЯВКИ КЛИЕНТОВ */
-function renderOwnerPhotosTab() {
-  const currentFilter = session.ownerRequestFilter || 'all';
-  const pendingRequests = state.customerRequests ? state.customerRequests.filter(r => r.status === 'pending') : [];
-  
-  const filteredRequests = pendingRequests.filter(r => {
-    if (currentFilter === 'all') return true;
-    return r.pointId === currentFilter;
-  });
-
-  const groupedAllPhotos = groupPhotosByCode(state.digitalPhotos);
-
-  return `
-  <div class="panel">
-    <h3>Заявки Клиентов (${pendingRequests.length})</h3>
-    
-    <div class="field">
-      <label class="field-label">Фильтр по точке:</label>
-      <select onchange="session.ownerRequestFilter = this.value; saveSession(); render();">
-        <option value="all" ${currentFilter === 'all' ? 'selected' : ''}>🌐 Все точки</option>
-        ${state.points.map(pt => `<option value="${pt.id}" ${currentFilter === pt.id ? 'selected' : ''}>📍 ${pt.name}</option>`).join('')}
-      </select>
-    </div>
-
-    ${!filteredRequests.length ? '<p style="font-size:12px; color:var(--ink-soft); margin-top:12px;">Заявок по выбранному фильтру нет</p>' :
-      filteredRequests.map(r => {
-        const pt = state.points.find(x => x.id === r.pointId);
-        return `
-        <div style="background:var(--bg-2); border:1px solid var(--brass); border-radius:var(--radius-sm); padding:12px; margin-bottom:10px;">
-          <div style="font-size:13px; margin-bottom:4px;">
-            <b>Точка:</b> <span style="color:var(--brass);">${pt ? pt.name : 'Не указана'}</span> | 
-            <b>Имя:</b> ${r.name} | <b>Тел:</b> ${r.phone}
-          </div>
-          <div style="font-size:11px; color:var(--ink-soft); margin-bottom:8px;">Время: ${r.date}</div>
-          <img src="${r.magnetUrl}" style="width:100%; max-height:200px; object-fit:cover; border-radius:var(--radius-sm); margin-bottom:8px; cursor:pointer;" onclick="openLightbox('${r.magnetUrl}')" title="Кликните для увеличения">
-          <div style="display:flex; gap:8px;">
-            <button class="btn small gold" style="flex:1;" onclick="fillUploadCodeFromRequest('${r.id}')">Принять (Присвоить номер)</button>
-            <button class="btn small red" style="flex:1;" onclick="rejectCustomerRequest('${r.id}')">Отклонить заявку</button>
-          </div>
-        </div>`;
-      }).join('')}
-  </div>
-
-  <div class="panel">
-    <h3>Опубликовать фото для клиента</h3>
-    <div class="field">
-      <label class="field-label">Выберите точку</label>
-      <select id="ownerUploadPoint" onchange="formBuffer['ownerUploadPoint']=this.value">
-        ${state.points.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-      </select>
-    </div>
-    <div class="field"><label class="field-label">Код заказа</label><input type="text" id="ownerUploadCode" placeholder="например 1024" oninput="formBuffer['ownerUploadCode']=this.value"></div>
-    <div class="field"><label class="field-label">Файлы фотографий</label><input type="file" id="ownerUploadFile" accept="image/*" multiple></div>
-    <button class="btn blue" onclick="uploadOwnerPhoto()">Загрузить и опубликовать</button>
-    ${generatedClientText ? `
-      <div class="copy-box">
-        <div style="font-size:11px; color:var(--brass); margin-bottom:4px; font-weight:600;">Текст для клиента:</div>
-        <div id="textToCopy" style="font-size:13px; white-space:pre-wrap;">${generatedClientText}</div>
-        <button class="btn small gold" style="margin-top:8px;" onclick="copyClientText()">Скопировать текст</button>
-      </div>
-    ` : ''}
-  </div>
-
-  <div class="panel">
-    <h3>База загруженных заказов (${groupedAllPhotos.length})</h3>
-    ${renderGroupedPhotoList(groupedAllPhotos, true)}
-  </div>`;
-}
-
-function uploadOwnerPhoto() {
-  const pointId = document.getElementById('ownerUploadPoint').value;
-  uploadDigitalPhoto(pointId, 'ownerUploadCode', 'ownerUploadFile');
-}
-
-function logout() {
-  session.userId = null;
-  session.currentTab = 'download_public';
-  session.userSubTab = 'main';
-  saveSession();
-  render();
-}
+// Инициализация стартовой страницы из URL
+parseURLAndSetSession();
+render();
 </script>
 </body>
 </html>
