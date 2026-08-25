@@ -124,6 +124,23 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const dbRef = db.ref('app_state');
 
+// Вспомогательная функция для генерации SHA-256 хеша
+async function hashString(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Хеши по умолчанию для защиты чувствительных данных
+// masterPasswordHash -> '12345'
+// owner usernameHash -> 'owner'
+// owner passwordHash -> '123'
+const DEFAULT_MASTER_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+const DEFAULT_OWNER_USER_HASH = 'eeafbf4d9b3957b139da7b7b2e29743c6838382d61d564119d80d1a4ee8f6158';
+const DEFAULT_OWNER_PASS_HASH = 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3';
+
 // ==========================================
 // 2. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ И СОСТОЯНИЕ
 // ==========================================
@@ -134,10 +151,10 @@ const nowFormatted = () => new Date().toLocaleString('ru-RU', { dateStyle: 'shor
 
 function defaultState() {
   return {
-    masterPassword: '12345',
+    masterPasswordHash: DEFAULT_MASTER_HASH,
     currentSeason: new Date().getFullYear().toString(),
     users: [
-      { id: 'owner_1', username: 'Owner', password: '123', role: 'owner', salaryBalance: 0 }
+      { id: 'owner_1', usernameHash: DEFAULT_OWNER_USER_HASH, passwordHash: DEFAULT_OWNER_PASS_HASH, role: 'owner', salaryBalance: 0 }
     ],
     points: [
       { id: 'pt_1', name: 'Главная точка', revenue: 0, small: 100, big: 100, salaryPercent: 10 }
@@ -294,9 +311,22 @@ dbRef.on('value', (snapshot) => {
 
   if (data) {
     state = data;
-    if (!state.masterPassword) state.masterPassword = '12345';
+    if (!state.masterPasswordHash) {
+      state.masterPasswordHash = DEFAULT_MASTER_HASH;
+    }
     if (!state.currentSeason) state.currentSeason = new Date().getFullYear().toString();
     if (!state.users) state.users = [];
+    
+    // Миграция старых учеток под новую схему хеширования при необходимости
+    state.users.forEach(async u => {
+      if (u.username && !u.usernameHash) {
+        u.usernameHash = await hashString(u.username.toLowerCase());
+      }
+      if (u.password && !u.passwordHash) {
+        u.passwordHash = await hashString(u.password);
+      }
+    });
+
     if (!state.points) state.points = [];
     if (!state.salesEntries) state.salesEntries = [];
     if (!state.purchaseEntries) state.purchaseEntries = [];
@@ -339,6 +369,12 @@ function saveData() {
 }
 
 function currentUser() { return state.users.find(u => u.id === session.userId) || null; }
+
+function getDisplayName(user) {
+  if (!user) return '';
+  if (user.role === 'owner') return 'Owner';
+  return user.displayName || user.username || 'Пользователь';
+}
 
 function getUnreadChatCount(userId) {
   if (!userId) return 0;
@@ -643,12 +679,23 @@ function renderAuthPage() {
   </div>`;
 }
 
-function handleLogin() {
+async function handleLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
-  const user = state.users.find(x => x.username.toLowerCase() === u.toLowerCase() && x.password === p);
+  
+  if (!u || !p) return toast('Введите логин и пароль', true);
+
+  const inputUserHash = await hashString(u.toLowerCase());
+  const inputPassHash = await hashString(p);
+
+  const user = state.users.find(x => {
+    const matchUser = x.usernameHash ? x.usernameHash === inputUserHash : (x.username && x.username.toLowerCase() === u.toLowerCase());
+    const matchPass = x.passwordHash ? x.passwordHash === inputPassHash : (x.password === p);
+    return matchUser && matchPass;
+  });
   
   if(!user) return toast('Неверный логин или пароль', true);
+  
   session.userId = user.id;
   session.currentTab = 'main';
   session.userSubTab = 'main';
@@ -687,7 +734,7 @@ function renderChatSection(user) {
           return `
           <div class="dialog-item ${targetId === u.id ? 'active' : ''}" onclick="session.activeChatTarget='${u.id}'; saveSession(); render();">
             <div>
-              <b>${u.username}</b>
+              <b>${getDisplayName(u)}</b>
               <div style="font-size:10px; color:var(--ink-soft);">${roleTitle}</div>
             </div>
             ${unread > 0 ? `<span class="dialog-badge">${unread}</span>` : ''}
@@ -698,7 +745,7 @@ function renderChatSection(user) {
       <!-- Main Chat Area -->
       <div class="chat-main">
         <div class="chat-header">
-          ${targetId === 'all' ? '📢 Общий чат' : `💬 Переписка с ${activeDialogUser ? activeDialogUser.username : ''}`}
+          ${targetId === 'all' ? '📢 Общий чат' : `💬 Переписка с ${activeDialogUser ? getDisplayName(activeDialogUser) : ''}`}
         </div>
 
         <div class="chat-box" id="chatBox">
@@ -741,7 +788,7 @@ function sendChatMessage() {
   state.chatMessages.push({
     id: uid(),
     senderId: user.id,
-    senderName: user.username,
+    senderName: getDisplayName(user),
     targetId: targetId,
     text: text,
     time: nowFormatted(),
@@ -773,7 +820,7 @@ function deleteChatMessage(msgId) {
 function renderProfileCabinet(user) {
   return `
   <div class="panel fade-in" style="border-color:var(--brass);">
-    <h3>Личный кабинет: ${user.username}</h3>
+    <h3>Личный кабинет: ${getDisplayName(user)}</h3>
     <p style="font-size:12px; color:var(--ink-soft); margin-bottom:16px;">
       Роль: <b style="color:var(--ink);">${user.role === 'owner' ? 'Владелец' : user.role === 'employee' ? 'Продавец' : 'Закупщик'}</b>
     </p>
@@ -798,29 +845,37 @@ function renderProfileCabinet(user) {
   </div>`;
 }
 
-function changeMyPassword() {
+async function changeMyPassword() {
   const curr = document.getElementById('currPassword').value;
   const newP = document.getElementById('newPassword').value;
   const confP = document.getElementById('confirmPassword').value;
 
   const user = currentUser();
   if(!curr || !newP || !confP) return toast('Заполните все поля', true);
-  if(user.password !== curr) return toast('Неверный текущий пароль', true);
+  
+  const currHash = await hashString(curr);
+  const matchPass = user.passwordHash ? user.passwordHash === currHash : (user.password === curr);
+  if(!matchPass) return toast('Неверный текущий пароль', true);
   if(newP !== confP) return toast('Новые пароли не совпадают', true);
 
-  user.password = newP;
+  user.passwordHash = await hashString(newP);
+  delete user.password; // Удаляем открытый пароль если был
   saveData();
   toast('Пароль аккаунта изменён!');
 }
 
-function changeMasterPassword() {
+async function changeMasterPassword() {
   const curr = document.getElementById('currMasterPass').value;
-  const newP = document.getElementById('newMasterPass').value;
+  const newP = document.getElementById('newPassword').value;
 
-  if(curr !== state.masterPassword) return toast('Неверный текущий мастер-пароль', true);
+  const currHash = await hashString(curr);
+  const matchMaster = state.masterPasswordHash ? state.masterPasswordHash === currHash : (state.masterPassword === curr);
+  
+  if(!matchMaster) return toast('Неверный текущий мастер-пароль', true);
   if(!newP || newP.length < 3) return toast('Пароль слишком короткий', true);
 
-  state.masterPassword = newP;
+  state.masterPasswordHash = await hashString(newP);
+  delete state.masterPassword; // Удаляем открытый мастер-пароль если был
   saveData();
   toast('Мастер-пароль сброса изменен!');
 }
@@ -834,7 +889,7 @@ function renderEmployeeDashboard(user) {
 
   return `
   <div class="topbar">
-    <div><b>${point ? point.name : 'Продавец'}</b> <span class="role-chip">(${user.username})</span></div>
+    <div><b>${point ? point.name : 'Продавец'}</b> <span class="role-chip">(${getDisplayName(user)})</span></div>
     <div>
       <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='chat'?'main':'chat')">
         ${session.userSubTab === 'chat' ? 'Главная' : '💬 Чат'}
@@ -967,7 +1022,7 @@ function renderEmployeeMainView(user, allowedPoints, point) {
     return `<div class="panel">Вам не назначена ни одна точка. Обратитесь к владельцу.</div>`;
   }
 
-  const myPhotos = state.digitalPhotos.filter(p => p.uploadedBy === user.username);
+  const myPhotos = state.digitalPhotos.filter(p => p.uploadedBy === getDisplayName(user));
   const groupedMyPhotos = groupPhotosByCode(myPhotos);
   
   const pendingRequests = state.customerRequests 
@@ -1121,7 +1176,7 @@ function submitEmployeeReport(pointId) {
   const earned = Math.round(rev * ((point.salaryPercent || 0) / 100));
   user.salaryBalance = (user.salaryBalance || 0) + earned;
 
-  state.salesEntries.unshift({ id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: user.id, username: user.username, season: state.currentSeason });
+  state.salesEntries.unshift({ id: uid(), pointId, date: reportDate, small, big, revenue: rev, userId: user.id, username: getDisplayName(user), season: state.currentSeason });
   
   delete formBuffer['empRev'];
   delete formBuffer['empSm'];
@@ -1137,7 +1192,7 @@ function submitEmployeeReport(pointId) {
       if (amountToReq > user.salaryBalance) {
         toast('Запрошенная сумма превышает доступный баланс!', true);
       } else {
-        state.payoutRequests.unshift({ id: uid(), userId: user.id, username: user.username, amount: amountToReq, type: 'Выплата за день', date: reportDate, status: 'pending' });
+        state.payoutRequests.unshift({ id: uid(), userId: user.id, username: getDisplayName(user), amount: amountToReq, type: 'Выплата за день', date: reportDate, status: 'pending' });
         saveData();
         toast('Запрос на выплату отправлен!');
       }
@@ -1155,7 +1210,7 @@ function requestCustomBalancePayout(userId) {
   if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
   if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
   
-  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  state.payoutRequests.unshift({ id: uid(), userId, username: getDisplayName(u), amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
   saveData();
   toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
 }
@@ -1199,7 +1254,7 @@ async function uploadDigitalPhoto(pointId, codeInputId, fileInputId) {
           code,
           phone: phone,
           photoUrl: result.data.url,
-          uploadedBy: currentUser().username,
+          uploadedBy: getDisplayName(currentUser()),
           pointId,
           downloaded: false,
           createdAt: Date.now()
@@ -1242,7 +1297,7 @@ function renderBuyerDashboard(user) {
   const unreadCount = getUnreadChatCount(user.id);
   return `
   <div class="topbar">
-    <div><b>Закупочный кабинет</b> <span class="role-chip">(${user.username})</span></div>
+    <div><b>Закупочный кабинет</b> <span class="role-chip">(${getDisplayName(user)})</span></div>
     <div>
       <button class="btn small gold" onclick="switchUserSubTab(session.userSubTab==='chat'?'main':'chat')">
         ${session.userSubTab === 'chat' ? 'Главная' : '💬 Чат'}
@@ -1307,7 +1362,7 @@ function requestCustomBalancePayoutBuyer(userId) {
   if(!amountInput || amountInput <= 0) return toast('Введите корректную сумму', true);
   if(amountInput > u.salaryBalance) return toast('Запрошенная сумма превышает Ваш баланс', true);
   
-  state.payoutRequests.unshift({ id: uid(), userId, username: u.username, amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
+  state.payoutRequests.unshift({ id: uid(), userId, username: getDisplayName(u), amount: amountInput, type: 'Вывод средств', date: todayStr(), status: 'pending' });
   saveData();
   toast(`Отправлен запрос на вывод: ${money(amountInput)}`);
 }
@@ -1322,7 +1377,7 @@ function submitPurchase(pointId) {
   point.big += big;
   point.revenue -= cost;
 
-  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: currentUser().username, season: state.currentSeason });
+  state.purchaseEntries.unshift({ id: uid(), pointId, date: todayStr(), small, big, cost, userId: currentUser().id, username: getDisplayName(currentUser()), season: state.currentSeason });
   
   delete formBuffer['buySm'];
   delete formBuffer['buyBg'];
@@ -1603,7 +1658,7 @@ function renderOwnerTeamTab() {
     ${state.users.filter(u => u.role !== 'owner').map(u => `
       <div style="border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <b>${u.username}</b>
+          <b>${getDisplayName(u)}</b>
           <span>Баланс: <b style="color:var(--green); font-size:16px;">${money(u.salaryBalance||0)}</b></span>
         </div>
         
@@ -1638,13 +1693,14 @@ function renderOwnerTeamTab() {
   </div>`;
 }
 
-function resetUserPasswordPrompt(userId) {
+async function resetUserPasswordPrompt(userId) {
   const u = state.users.find(x => x.id === userId);
-  const newPass = prompt(`Новый пароль для ${u.username}:`);
+  const newPass = prompt(`Новый пароль для ${getDisplayName(u)}:`);
   if(!newPass) return;
-  u.password = newPass;
+  u.passwordHash = await hashString(newPass);
+  delete u.password;
   saveData();
-  toast(`Пароль для ${u.username} изменен`);
+  toast(`Пароль для ${getDisplayName(u)} изменен`);
 }
 
 function adjustBalancePrompt(userId, action) {
@@ -1687,7 +1743,7 @@ function updateUserRole(userId, role) {
 
 function manualClearBalance(userId) {
   const u = state.users.find(x => x.id === userId);
-  if(confirm(`Обнулить баланс ${money(u.salaryBalance||0)} сотрудника ${u.username}?`)) {
+  if(confirm(`Обнулить баланс ${money(u.salaryBalance||0)} сотрудника ${getDisplayName(u)}?`)) {
     u.salaryBalance = 0;
     saveData();
   }
@@ -1711,11 +1767,23 @@ function rejectPayout(requestId) {
   }
 }
 
-function addNewUser() {
+async function addNewUser() {
   const u = prompt('Логин сотрудника:');
   const p = prompt('Пароль:');
   if(!u || !p) return;
-  state.users.push({ id: uid(), username: u, password: p, role: 'employee', assignedPoints: [], salaryBalance: 0 });
+  
+  const usernameHash = await hashString(u.toLowerCase());
+  const passwordHash = await hashString(p);
+  
+  state.users.push({ 
+    id: uid(), 
+    displayName: u,
+    usernameHash, 
+    passwordHash, 
+    role: 'employee', 
+    assignedPoints: [], 
+    salaryBalance: 0 
+  });
   saveData();
 }
 
@@ -1875,9 +1943,14 @@ function deleteArchivedPurchase(seasonName, purchaseId) {
   }
 }
 
-function deleteEntireArchivedSeason(seasonName) {
+async function deleteEntireArchivedSeason(seasonName) {
   const masterInput = prompt(`Внимание! Введите Мастер-пароль для удаления ВСЕГО архива за ${seasonName} год:`);
-  if(masterInput !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+  if (!masterInput) return;
+  
+  const inputHash = await hashString(masterInput);
+  const matchMaster = state.masterPasswordHash ? state.masterPasswordHash === inputHash : (state.masterPassword === masterInput);
+
+  if (!matchMaster) return toast('Неверный Мастер-пароль!', true);
 
   state.archivedSeasons = state.archivedSeasons.filter(s => s.seasonName !== seasonName);
   saveData();
@@ -1902,7 +1975,7 @@ function renderOwnerSeasonsControlTab() {
 
   <div class="panel" style="border-color:var(--red); margin-top:24px;">
     <h3 style="color:var(--red);">Сброс Данных (Требуется Мастер-пароль)</h3>
-    <p style="font-size:11px; color:var(--ink-soft); margin-bottom:16px;">По умолчанию Мастер-пароль: <b>12345</b> (можно сменить в Профиле)</p>
+    <p style="font-size:11px; color:var(--ink-soft); margin-bottom:16px;">Мастер-пароль защищен хешированием и может быть изменен в Профиле.</p>
 
     <div style="margin-bottom:16px; padding:12px; background:var(--bg-2); border-radius:var(--radius-sm);">
       <h4 style="margin:0 0 6px 0;">1. Сбросить отчеты за ТЕКУЩИЙ ГОД (${state.currentSeason})</h4>
@@ -1941,9 +2014,14 @@ function finishCurrentSeason() {
   toast(`Сезон ${nextSeason} успешно начат!`);
 }
 
-function resetCurrentYearData() {
+async function resetCurrentYearData() {
   const pass = prompt(`ВНИМАНИЕ! Для сброса данных за ${state.currentSeason} год введите Мастер-пароль:`);
-  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+  if (!pass) return;
+
+  const inputHash = await hashString(pass);
+  const matchMaster = state.masterPasswordHash ? state.masterPasswordHash === inputHash : (state.masterPassword === pass);
+
+  if (!matchMaster) return toast('Неверный Мастер-пароль!', true);
 
   state.salesEntries = [];
   state.purchaseEntries = [];
@@ -1955,9 +2033,14 @@ function resetCurrentYearData() {
   toast(`Данные за ${state.currentSeason} год сброшены!`);
 }
 
-function resetEverythingData() {
+async function resetEverythingData() {
   const pass = prompt(`ОПАСНОСТЬ! Для ПОЛНОГО ОБНУЛЕНИЯ ВСЕЙ БАЗЫ ДАННЫХ введите Мастер-пароль:`);
-  if(pass !== state.masterPassword) return toast('Неверный Мастер-пароль!', true);
+  if (!pass) return;
+
+  const inputHash = await hashString(pass);
+  const matchMaster = state.masterPasswordHash ? state.masterPasswordHash === inputHash : (state.masterPassword === pass);
+
+  if (!matchMaster) return toast('Неверный Мастер-пароль!', true);
 
   state = defaultState();
   saveData();
